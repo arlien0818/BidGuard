@@ -1,0 +1,16 @@
+# 示例配置文件（提交到仓库）
+# 请不要在此文件中放置任何真实的密钥或敏感信息。
+
+# OCR 服务类型: local 或 aliyun
+ocr.type=aliyun
+
+# 本地 OCR 服务地址（仅当 ocr.type=local 时使用）
+ocr.local.url=http://localhost:5001/ocr
+
+# 阿里云 OCR API 端点
+ocr.aliyun.endpoint=ocr-api.cn-hangzhou.aliyuncs.com
+
+# 注意：阿里云 AccessKeyId/AccessKeySecret 不应放入仓库中。请在本地创建一个未提交的文件 local.properties，
+# 内容示例：
+# ocr.aliyun.access.key.id=你的AccessKeyId
+# ocr.aliyun.access.key.secret=你的AccessKeySecret

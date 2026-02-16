@@ -1,0 +1,18 @@
+# BidGuard OCR Service - 版本锁定
+# 生成时间: 2026-02-06 14:47:25
+# Python: 3.9.13
+#
+# 注意：不要随意升级这些版本，OCR对版本敏感
+#
+
+Flask==2.3.3
+paddlepaddle==3.0.0
+paddleocr==3.4.0
+Pillow==10.0.1
+PyMuPDF==1.26.5
+paddlex==3.4.1
+numpy==2.0.2
+# opencv-python: 未安装
+opencv-contrib-python==4.10.0.84
+werkzeug==3.1.5
+jinja2==3.1.6

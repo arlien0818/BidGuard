@@ -1,0 +1,164 @@
+=== 段落匹配功能代码补丁 ===
+
+第一步：在 DocumentSimilarityResult 类定义之前（约第 413 行）插入以下代码：
+
+    // ========== 段落匹配相关类 ==========
+    
+    // 段落信息
+    public static class Paragraph {
+        public final int index;
+        public final String text;
+        public final int startPos;
+        public final int endPos;
+
+        public Paragraph(int index, String text, int startPos, int endPos) {
+            this.index = index;
+            this.text = text;
+            this.startPos = startPos;
+            this.endPos = endPos;
+        }
+
+        public int length() {
+            return text == null ? 0 : text.length();
+        }
+    }
+
+    // 段落匹配结果
+    public static class ParagraphMatch {
+        public final Paragraph para1;
+        public final Paragraph para2;
+        public final double similarity;
+
+        public ParagraphMatch(Paragraph para1, Paragraph para2, double similarity) {
+            this.para1 = para1;
+            this.para2 = para2;
+            this.similarity = similarity;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("文件1段落#%d ↔ 文件2段落#%d  相似度: %.2f%%\n" +
+                            "  [文件1] %s\n" +
+                            "  [文件2] %s",
+                    para1.index, para2.index, similarity,
+                    preview200(para1.text), preview200(para2.text));
+        }
+    }
+
+    // 段落匹配报告
+    public static class ParagraphMatchingReport {
+        public final List<ParagraphMatch> matches;
+        public final int totalParagraphs1;
+        public final int totalParagraphs2;
+        public final double threshold;
+
+        public ParagraphMatchingReport(List<ParagraphMatch> matches, int total1, int total2, double threshold) {
+            this.matches = matches;
+            this.totalParagraphs1 = total1;
+            this.totalParagraphs2 = total2;
+            this.threshold = threshold;
+        }
+
+        @Override
+        public String toString() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("\n========== 段落匹配报告 ==========\n");
+            sb.append(String.format("文件1段落数: %d, 文件2段落数: %d\n", totalParagraphs1, totalParagraphs2));
+            sb.append(String.format("相似度阈值: %.1f%%\n", threshold));
+            sb.append(String.format("发现 %d 处高度相似段落:\n\n", matches.size()));
+
+            if (matches.isEmpty()) {
+                sb.append("未发现超过阈值的相似段落。\n");
+            } else {
+                for (int i = 0; i < matches.size(); i++) {
+                    sb.append(String.format("[%d] ", i + 1)).append(matches.get(i)).append("\n\n");
+                }
+            }
+            sb.append("=================================\n");
+            return sb.toString();
+        }
+    }
+
+    // ========== 段落匹配相关类结束 ==========
+
+
+第二步：在 approxTokenCountForSimilarity() 方法之后（约第 583 行）插入以下方法：
+
+    /**
+     * 将文本分割为段落列表
+     * 策略：按连续换行切分，过滤过短段落（<30字符）
+     */
+    public static List<Paragraph> splitIntoParagraphs(String text) {
+        List<Paragraph> paragraphs = new ArrayList<>();
+        if (text == null || text.isEmpty()) {
+            return paragraphs;
+        }
+
+        String[] blocks = text.split("\\n\\n+");
+        int currentPos = 0;
+        int index = 0;
+
+        for (String block : blocks) {
+            String trimmed = block.trim();
+            if (trimmed.length() >= 30) {
+                int start = currentPos;
+                int end = start + trimmed.length();
+                paragraphs.add(new Paragraph(index++, trimmed, start, end));
+            }
+            currentPos += block.length() + 2;
+        }
+
+        return paragraphs;
+    }
+
+    /**
+     * 段落级相似度匹配：找出所有高度相似的段落对
+     * @param text1 文档1文本
+     * @param text2 文档2文本
+     * @param threshold 相似度阈值（0-100），默认建议70
+     * @return 段落匹配报告
+     */
+    public static ParagraphMatchingReport matchParagraphs(String text1, String text2, double threshold) {
+        List<Paragraph> paras1 = splitIntoParagraphs(text1);
+        List<Paragraph> paras2 = splitIntoParagraphs(text2);
+        List<ParagraphMatch> matches = new ArrayList<>();
+
+        System.out.println("[段落匹配] 文件1: " + paras1.size() + " 段, 文件2: " + paras2.size() + " 段");
+
+        for (Paragraph p1 : paras1) {
+            for (Paragraph p2 : paras2) {
+                double sim = similarityJaccardNGram(p1.text, p2.text, 3);
+                if (sim >= threshold) {
+                    matches.add(new ParagraphMatch(p1, p2, sim));
+                }
+            }
+        }
+
+        // 按相似度降序排列
+        matches.sort((a, b) -> Double.compare(b.similarity, a.similarity));
+
+        return new ParagraphMatchingReport(matches, paras1.size(), paras2.size(), threshold);
+    }
+
+
+第三步：在 compareFiles() 方法的返回语句前（约第 657 行），将：
+
+        sb.append("[DEBUG] 单项测试:\n");
+        sb.append("TF-IDF相似度: ").append(String.format("%.2f", tfidfOnly)).append("%\n");
+        sb.append("结构相似度: ").append(String.format("%.2f", structuralOnly)).append("%\n");
+        return sb.toString();
+
+改为：
+
+        sb.append("[DEBUG] 单项测试:\n");
+        sb.append("TF-IDF相似度: ").append(String.format("%.2f", tfidfOnly)).append("%\n");
+        sb.append("结构相似度: ").append(String.format("%.2f", structuralOnly)).append("%\n\n");
+
+        // 段落匹配
+        ParagraphMatchingReport paraReport = matchParagraphs(text1, text2, 70.0);
+        sb.append(paraReport);
+
+        return sb.toString();
+
+
+完成后重新编译运行即可。
