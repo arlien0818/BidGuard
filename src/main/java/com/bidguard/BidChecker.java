@@ -87,6 +87,7 @@ public class BidChecker {
         return t;
     }
 
+    //这个方法目前没有任何地方用到。
     private static String advancedNormalization(String text) {
         if (text == null || text.isEmpty()) {
             return "";
@@ -104,7 +105,7 @@ public class BidChecker {
             "的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都", "一", "一个", "上", "也", "很", "到", "说", "要", "去", "你", "会", "着", "没有", "看", "好", "自己", "这",
             "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "a", "an", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did"
     );
-
+    //这个方法目前没有任何地方用到。
     private static String removeStopWords(String text) {
         if (text == null || text.isEmpty()) {
             return "";
@@ -302,7 +303,7 @@ public class BidChecker {
         }
         return tf;
     }
-
+    //这个方法目前没有任何地方用到。
     private static double calculateTFIDF(String term, Map<String, Integer> tf, List<String> corpus) {
         int termFreq = tf.getOrDefault(term, 0);
         if (termFreq == 0) {
@@ -328,7 +329,9 @@ public class BidChecker {
         return tfScore * idf;
     }
 
+
     // 新的TF-IDF计算方法，使用词频映射而不是原始文本
+    //这个方法目前没有任何地方用到。
     private static double calculateTFIDFWithTFMaps(String term, Map<String, Integer> tf, List<Map<String, Integer>> tfCorpus) {
         int termFreq = tf.getOrDefault(term, 0);
         if (termFreq == 0) {
@@ -881,6 +884,7 @@ public class BidChecker {
 
     /**
      * 将归一化文本中的位置映射回原始文本位置
+     * //这个方法目前没有任何地方用到。
      */
     private static int mapNormalizedPosToOriginal(String original, String normalized, int normPos) {
         if (normPos <= 0) return 0;
