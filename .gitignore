@@ -1,60 +1,79 @@
-target/
-!.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
+##################################################
+# ===== 基础通用 =====
+##################################################
+*.log
+*.tmp
+*.bak
+*.swp
+*.lock
+.DS_Store
+Thumbs.db
+*.lnk
 
-### IntelliJ IDEA ###
-.idea/modules.xml
-.idea/jarRepositories.xml
-.idea/compiler.xml
-.idea/libraries/
-*.iws
+##################################################
+# ===== IntelliJ IDEA =====
+##################################################
+.idea/
 *.iml
-*.ipr
 
-### Eclipse ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
-
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
-
-### VS Code ###
+##################################################
+# ===== VSCode =====
+##################################################
 .vscode/
 
-### Mac OS ###
-.DS_Store
+##################################################
+# ===== Maven / Java =====
+##################################################
+target/
+*.class
 
-##################
-# Python
-##################
-venv/
-.venv/
-__pycache__/
-*.pyc
+##################################################
+# ===== Python (ocr-service) =====
+##################################################
+ocr-service/__pycache__/
+ocr-service/*.pyc
+ocr-service/*.pyo
+ocr-service/.venv/
+ocr-service/venv/
 
+##################################################
+# ===== OCR临时文件（非常重要） =====
+##################################################
+ocr-service/tmp/
+ocr-service/test.jpg
+ocr-service/test.pdf
+ocr-service/testd.jpg
+ocr-service/testPic.jpg
 
-##################
-# Output / Logs
-##################
+##################################################
+# ===== 输出结果（必须忽略） =====
+##################################################
 output/
-logs/
-*.log
+output/history/
+
+##################################################
+# ===== 测试文件（标书样本不要进仓库） =====
+##################################################
+testfiles/
+*.docx
+*.pdf
+*.jpeg
+*.jpg
+*.png
 
 
-.svn
+.env
+
+##################################################
+# ===== BFG 工具（不需要进仓库） =====
+##################################################
+bfg-*.jar
+
+##################################################
+# ===== Archive 历史代码（可选） =====
+##################################################
+# 如果你确认_archive只是废弃代码，可以取消注释
+# _archive/
 
 # Local sensitive properties (do not commit)
 local.properties
