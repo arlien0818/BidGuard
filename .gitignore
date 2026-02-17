@@ -78,3 +78,5 @@ bfg-*.jar
 # Local sensitive properties (do not commit)
 local.properties
 testfiles
+
+node_modules/
