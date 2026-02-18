@@ -394,27 +394,32 @@ public class BidChecker {
         SimilarityConfig config = SimilarityConfig.getInstance();
         
         // 1. 词汇重叠相似度
-        double lexicalSim = Math.max(
-                similarityJaccardNGram(text1, text2, config.ngramSize2),
-                similarityJaccardNGram(text1, text2, config.ngramSize3)
-        ) * config.weightLexical;
 
-        // 2. TF-IDF语义相似度
-        double tfidfSim = calculateTFIDFSimilarity(text1, text2) * config.weightSemantic;
+        // double lexicalSim = Math.max(
+        //         similarityJaccardNGram(text1, text2, config.ngramSize2),
+        //         similarityJaccardNGram(text1, text2, config.ngramSize3)
+        // ) * config.weightLexical;
+        //暂时只用3-gram，2-gram太宽松了，容易误报。
+        double lexicalSim = similarityJaccardNGram(text1, text2, config.ngramSize3) * config.weightLexical;
 
-        // 3. 结构相似度
-        double structuralSim = calculateStructuralSimilarity(text1, text2) * config.weightStructural;
+        // 2. TF-IDF语义相似度   先不要了
+        // double tfidfSim = calculateTFIDFSimilarity(text1, text2) * config.weightSemantic;
 
-        double totalSim = lexicalSim + tfidfSim + structuralSim;
+        // // 3. 结构相似度 先不要了
+        // double structuralSim = calculateStructuralSimilarity(text1, text2) * config.weightStructural;
 
-
-        System.out.println(String.format("[DEBUG] 词汇相似度: %.2f%% (权重%.0f%%), TF-IDF相似度: %.2f%% (权重%.0f%%), 结构相似度: %.2f%% (权重%.0f%%)",
-                    lexicalSim / config.weightLexical, config.weightLexical * 100,
-                    tfidfSim / config.weightSemantic, config.weightSemantic * 100,
-                    structuralSim / config.weightStructural, config.weightStructural * 100));
+        // double totalSim = lexicalSim + tfidfSim + structuralSim;
 
 
-        return Math.min(100.0, totalSim);
+        // System.out.println(String.format("[DEBUG] 词汇相似度: %.2f%% (权重%.0f%%), TF-IDF相似度: %.2f%% (权重%.0f%%), 结构相似度: %.2f%% (权重%.0f%%)",
+        //             lexicalSim / config.weightLexical, config.weightLexical * 100,
+        //             tfidfSim / config.weightSemantic, config.weightSemantic * 100,
+        //             structuralSim / config.weightStructural, config.weightStructural * 100));
+        System.out.println(String.format("[DEBUG] 词汇相似度: %.2f%% (权重%.0f%%)",
+            lexicalSim / config.weightLexical, config.weightLexical * 100));
+
+
+        return Math.min(100.0, lexicalSim);
     }
 
     // 动态阈值判定
@@ -844,7 +849,7 @@ public class BidChecker {
             }
         }
         
-        // 过滤重叠的子串，保留最长的
+        // 过滤重叠的子串，保留最长的，并裁剪部分重叠的片段
         foundSubstrings.sort((a, b) -> Integer.compare(b[2], a[2]));  // 按长度降序
         
         boolean[] used1 = new boolean[len1];
@@ -855,23 +860,42 @@ public class BidChecker {
             int pos2 = substr[1];
             int length = substr[2];
             
-            // 检查是否与已有的匹配重叠
-            boolean overlap = false;
-            for (int k = 0; k < length; k++) {
-                if (used1[pos1 + k] || used2[pos2 + k]) {
-                    overlap = true;
-                    break;
-                }
-            }
+            // 寻找未被使用的连续片段
+            int currentStart1 = pos1;
+            int currentStart2 = pos2;
             
-            if (!overlap) {
-                String substring = text1.substring(pos1, pos1 + length);
-                matches.add(new SubstringMatch(substring, pos1, pos2));
+            for (int k = 0; k < length; k++) {
+                boolean isUsed = used1[pos1 + k] || used2[pos2 + k];
                 
-                // 标记已使用
-                for (int k = 0; k < length; k++) {
-                    used1[pos1 + k] = true;
-                    used2[pos2 + k] = true;
+                if (isUsed) {
+                    // 遇到已使用的位置，先保存之前的未使用片段
+                    int segmentLength = k - (currentStart1 - pos1);
+                    if (segmentLength >= minLength) {
+                        String substring = text1.substring(currentStart1, currentStart1 + segmentLength);
+                        matches.add(new SubstringMatch(substring, currentStart1, currentStart2));
+                        
+                        // 标记已使用
+                        for (int m = 0; m < segmentLength; m++) {
+                            used1[currentStart1 + m] = true;
+                            used2[currentStart2 + m] = true;
+                        }
+                    }
+                    // 重置起始位置到下一个未使用的位置
+                    currentStart1 = pos1 + k + 1;
+                    currentStart2 = pos2 + k + 1;
+                } else if (k == length - 1) {
+                    // 到达末尾，保存最后一个未使用片段
+                    int segmentLength = length - (currentStart1 - pos1);
+                    if (segmentLength >= minLength) {
+                        String substring = text1.substring(currentStart1, currentStart1 + segmentLength);
+                        matches.add(new SubstringMatch(substring, currentStart1, currentStart2));
+                        
+                        // 标记已使用
+                        for (int m = 0; m < segmentLength; m++) {
+                            used1[currentStart1 + m] = true;
+                            used2[currentStart2 + m] = true;
+                        }
+                    }
                 }
             }
         }

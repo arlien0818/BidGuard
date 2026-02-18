@@ -132,14 +132,16 @@ public class OcrDuplicateDetector {
             match.doc1Location = mapCharRangeToBlocks(
                 ocrResult1,
                 sm.startPos1,
-                sm.startPos1 + sm.length
+                sm.startPos1 + sm.length,
+                sm.substring
             );
             
             // 映射文档2中的位置
             match.doc2Location = mapCharRangeToBlocks(
                 ocrResult2,
                 sm.startPos2,
-                sm.startPos2 + sm.length
+                sm.startPos2 + sm.length,
+                sm.substring
             );
             
             result.matches.add(match);
@@ -160,17 +162,20 @@ public class OcrDuplicateDetector {
      * 策略：
      * 1. 遍历所有文字块，累计字符位置
      * 2. 找出与指定范围有重叠的所有文字块
-     * 3. 记录每个文字块在重复片段中的起止位置
+     * 3. 验证文字块的重叠部分是否真的在重复文本中
+     * 4. 只记录真正包含重复内容的文字块
      * 
      * @param ocrResult OCR识别结果
      * @param startChar fullText中的起始字符位置
      * @param endChar fullText中的结束字符位置
+     * @param duplicateText 重复的文本内容（用于验证）
      * @return 文档位置信息
      */
     private static DocumentLocation mapCharRangeToBlocks(
             OcrServiceClient.OcrResult ocrResult,
             int startChar,
-            int endChar) {
+            int endChar,
+            String duplicateText) {
         
         DocumentLocation location = new DocumentLocation();
         location.startCharPos = startChar;
@@ -192,18 +197,44 @@ public class OcrDuplicateDetector {
                 int overlapStart = Math.max(0, startChar - itemStart);
                 int overlapEnd = Math.min(itemText.length(), endChar - itemStart);
                 
-                TextBlockRef blockRef = new TextBlockRef(
-                    i,
-                    item.page,
-                    itemText,
-                    item.confidence,
-                    item.bbox
-                );
+                // 提取文字块中的重叠部分文本
+                String overlapText = itemText.substring(overlapStart, overlapEnd);
                 
-                blockRef.startCharInBlock = overlapStart;
-                blockRef.endCharInBlock = overlapEnd;
+                // 验证：重叠部分是否在重复文本中出现
+                // 去除所有空白字符后比较，这样可以容忍空格、换行等格式差异
+                String overlapNormalized = overlapText.replaceAll("\\s+", "");
+                String duplicateNormalized = duplicateText.replaceAll("\\s+", "");
                 
-                location.textBlocks.add(blockRef);
+                // 使用部分匹配：寻找最长的公共子串
+                // 如果重叠部分与重复文本有足够长的公共部分，就认为有效
+                boolean isValid = false;
+                if (overlapNormalized.length() > 2) {
+                    // 方法1：重叠部分完全在重复文本中
+                    if (duplicateNormalized.contains(overlapNormalized)) {
+                        isValid = true;
+                    } else {
+                        // 方法2：寻找最长公共子串，如果足够长，也认为有效
+                        int maxCommonLength = findLongestCommonSubstring(overlapNormalized, duplicateNormalized);
+                        // 要求：至少15个字符的公共子串，且公共部分占重叠部分的80%以上
+                        isValid = maxCommonLength >= 15 && 
+                                 (maxCommonLength * 1.0 / overlapNormalized.length() >= 0.80);
+                    }
+                }
+                
+                if (isValid) {
+                    TextBlockRef blockRef = new TextBlockRef(
+                        i,
+                        item.page,
+                        itemText,
+                        item.confidence,
+                        item.bbox
+                    );
+                    
+                    blockRef.startCharInBlock = overlapStart;
+                    blockRef.endCharInBlock = overlapEnd;
+                    
+                    location.textBlocks.add(blockRef);
+                }
             }
             
             currentPos = itemEnd;
@@ -215,6 +246,36 @@ public class OcrDuplicateDetector {
         }
         
         return location;
+    }
+    
+    /**
+     * 查找两个字符串的最长公共子串长度
+     * 用于验证文字块是否包含重复内容
+     */
+    private static int findLongestCommonSubstring(String str1, String str2) {
+        if (str1 == null || str2 == null || str1.isEmpty() || str2.isEmpty()) {
+            return 0;
+        }
+        
+        int maxLength = 0;
+        int len1 = str1.length();
+        int len2 = str2.length();
+        
+        // 使用动态规划查找最长公共子串
+        int[][] dp = new int[len1 + 1][len2 + 1];
+        
+        for (int i = 1; i <= len1; i++) {
+            for (int j = 1; j <= len2; j++) {
+                if (str1.charAt(i - 1) == str2.charAt(j - 1)) {
+                    dp[i][j] = dp[i - 1][j - 1] + 1;
+                    maxLength = Math.max(maxLength, dp[i][j]);
+                } else {
+                    dp[i][j] = 0;
+                }
+            }
+        }
+        
+        return maxLength;
     }
     
     /**
@@ -320,11 +381,10 @@ public class OcrDuplicateDetector {
                     match.doc1Location.textBlocks.size()));
                 
                 for (TextBlockRef block : match.doc1Location.textBlocks) {
-                    writer.println(String.format("   - 块#%d (第%d页, 置信度%.2f%%): %s",
+                    writer.println(String.format("   - 块#%d (第%d页, 置信度%.2f%%)",
                         block.blockIndex,
                         block.pageNumber,
-                        block.confidence * 100,
-                        truncate(block.text, 50)));
+                        block.confidence * 100));
                     if (block.bbox != null && block.bbox.size() == 4) {
                         writer.println(String.format("     坐标: [左上(%.0f,%.0f), 右上(%.0f,%.0f), 右下(%.0f,%.0f), 左下(%.0f,%.0f)]",
                             block.bbox.get(0)[0], block.bbox.get(0)[1],
@@ -344,11 +404,10 @@ public class OcrDuplicateDetector {
                     match.doc2Location.textBlocks.size()));
                 
                 for (TextBlockRef block : match.doc2Location.textBlocks) {
-                    writer.println(String.format("   - 块#%d (第%d页, 置信度%.2f%%): %s",
+                    writer.println(String.format("   - 块#%d (第%d页, 置信度%.2f%%)",
                         block.blockIndex,
                         block.pageNumber,
-                        block.confidence * 100,
-                        truncate(block.text, 50)));
+                        block.confidence * 100));
                     if (block.bbox != null && block.bbox.size() == 4) {
                         writer.println(String.format("     坐标: [左上(%.0f,%.0f), 右上(%.0f,%.0f), 右下(%.0f,%.0f), 左下(%.0f,%.0f)]",
                             block.bbox.get(0)[0], block.bbox.get(0)[1],

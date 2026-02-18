@@ -139,6 +139,22 @@ public class PdfAnnotator {
             
             for (OcrDuplicateDetector.TextBlockRef block : location.textBlocks) {
                 if (block.bbox != null && block.bbox.size() == 4) {
+                    // 计算重复内容在该块中的覆盖率
+                    int blockLength = block.text.length();
+                    int overlapLength = block.endCharInBlock - block.startCharInBlock;
+                    double coverageRatio = (double) overlapLength / blockLength;
+                    
+                    // 策略：只标注覆盖率≥55%的块
+                    // 这样既能标注跨行的真实重复内容，又能过滤掉低覆盖率的误标
+                    if (coverageRatio < 0.55) {
+                        LOGGER.info(String.format("跳过低覆盖率块 #%d (覆盖率: %.1f%%, 重叠: %d/%d)",
+                            block.blockIndex, coverageRatio * 100, overlapLength, blockLength));
+                        continue;
+                    }
+                    
+                    LOGGER.info(String.format("标注块 #%d (覆盖率: %.1f%%, 重叠: %d/%d)",
+                        block.blockIndex, coverageRatio * 100, overlapLength, blockLength));
+                    
                     int pageNum = block.pageNumber;
                     
                     // 转换为二维数组格式
