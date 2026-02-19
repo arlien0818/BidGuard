@@ -358,8 +358,8 @@ public class OcrServiceFactory {
             // 开启分页排序（对多列文本进行智能排序）
             request.setNeedSortPage(true);
             
-            // 输出单字识别结果（提供更详细的识别信息）
-            // request.setOutputCharInfo(true);  // 如需要单字信息可取消注释
+            // 输出单字识别结果（启用字符级精确标注）
+            request.setOutputCharInfo(true);
             
             // 开启表格识别
             // request.setOutputTable(true);  // 如需要表格识别可取消注释
@@ -451,6 +451,39 @@ public class OcrServiceFactory {
                                         item.bbox.add(vertex);
                                     }
                                 }
+                            }
+                            
+                            // 解析字符级位置信息 (charInfo字段)
+                            if (wordObj.has("charInfo") && wordObj.get("charInfo").isJsonArray()) {
+                                com.google.gson.JsonArray charInfoArray = wordObj.getAsJsonArray("charInfo");
+                                item.charBboxes = new ArrayList<>();
+                                
+                                for (int k = 0; k < charInfoArray.size(); k++) {
+                                    com.google.gson.JsonObject charObj = charInfoArray.get(k).getAsJsonObject();
+                                    
+                                    // 阿里云charInfo格式: {x, y, w, h, word, prob}
+                                    // x,y是左上角坐标，w是宽度，h是高度
+                                    if (charObj.has("x") && charObj.has("y") && 
+                                        charObj.has("w") && charObj.has("h")) {
+                                        
+                                        double x = charObj.get("x").getAsDouble();
+                                        double y = charObj.get("y").getAsDouble();
+                                        double w = charObj.get("w").getAsDouble();
+                                        double h = charObj.get("h").getAsDouble();
+                                        
+                                        // 构造字符的bbox（4个顶点：左上、右上、右下、左下）
+                                        List<double[]> charBbox = new ArrayList<>();
+                                        charBbox.add(new double[]{x, y});           // 左上
+                                        charBbox.add(new double[]{x + w, y});       // 右上
+                                        charBbox.add(new double[]{x + w, y + h});   // 右下
+                                        charBbox.add(new double[]{x, y + h});       // 左下
+                                        
+                                        item.charBboxes.add(charBbox);
+                                    }
+                                }
+                                
+                                LOGGER.fine(String.format("块#%d: 文字='%s', 字符bbox数=%d",
+                                    i, item.text, item.charBboxes.size()));
                             }
                             
                             item.page = 1;

@@ -77,6 +77,10 @@ public class OcrDuplicateDetector {
         public int startCharInBlock;          // 该文字块在重复片段中的起始字符（相对于文字块内）
         public int endCharInBlock;            // 该文字块在重复片段中的结束字符（相对于文字块内）
         
+        // 精确计算的子串bbox（仅当有字符级信息时）
+        // 如果为null，则使用上面的bbox；如果非 null，标注时优先使用这个
+        public List<double[]> preciseCharBbox;
+        
         public TextBlockRef(int blockIndex, int pageNumber, String text, 
                            double confidence, List<double[]> bbox) {
             this.blockIndex = blockIndex;
@@ -162,8 +166,8 @@ public class OcrDuplicateDetector {
      * 策略：
      * 1. 遍历所有文字块，累计字符位置
      * 2. 找出与指定范围有重叠的所有文字块
-     * 3. 验证文字块的重叠部分是否真的在重复文本中
-     * 4. 只记录真正包含重复内容的文字块
+     * 3. 对每个重叠块，如果有字符级bbox，则计算精确子串bbox
+     * 4. 验证：确保重叠部分真的在重复文本中
      * 
      * @param ocrResult OCR识别结果
      * @param startChar fullText中的起始字符位置
@@ -200,6 +204,9 @@ public class OcrDuplicateDetector {
                 // 提取文字块中的重叠部分文本
                 String overlapText = itemText.substring(overlapStart, overlapEnd);
                 
+                LOGGER.info(String.format("块#%d重叠检测: itemStart=%d, itemEnd=%d, 目标范围[%d,%d), 重叠[%d,%d), 重叠文本='%s'",
+                    i, itemStart, itemEnd, startChar, endChar, overlapStart, overlapEnd, overlapText));
+                
                 // 验证：重叠部分是否在重复文本中出现
                 // 去除所有空白字符后比较，这样可以容忍空格、换行等格式差异
                 String overlapNormalized = overlapText.replaceAll("\\s+", "");
@@ -233,11 +240,36 @@ public class OcrDuplicateDetector {
                     blockRef.startCharInBlock = overlapStart;
                     blockRef.endCharInBlock = overlapEnd;
                     
+                    // 如果有字符级bbox，计算精确的子串bbox
+                    if (item.charBboxes != null && !item.charBboxes.isEmpty()) {
+                        LOGGER.info(String.format("块#%d: 尝试计算精确bbox, 文本='%s', 字符数=%d, charBboxes数=%d, 范围[%d,%d)",
+                            i, itemText, itemText.length(), item.charBboxes.size(), overlapStart, overlapEnd));
+                        
+                        blockRef.preciseCharBbox = calculatePreciseSubstringBbox(
+                            item.charBboxes, overlapStart, overlapEnd, itemText);
+                        
+                        if (blockRef.preciseCharBbox != null) {
+                            LOGGER.info(String.format("✓ 块#%d: 成功计算精确子串bbox [%d,%d) / %d字符，子串='%s'",
+                                i, overlapStart, overlapEnd, itemText.length(), 
+                                itemText.substring(overlapStart, overlapEnd)));
+                        } else {
+                            LOGGER.warning(String.format("✗ 块#%d: 精确bbox计算失败，将使用整块bbox", i));
+                        }
+                    } else {
+                        LOGGER.warning(String.format("块#%d: 无字符级bbox数据 (charBboxes %s), 文本='%s'",
+                            i, (item.charBboxes == null ? "null" : "empty"), itemText));
+                    }
+                    
                     location.textBlocks.add(blockRef);
                 }
             }
             
+            // 更新位置：文字块长度 + 分隔符长度
+            // 阿里云OCR的content字段中，各word之间用\n连接（除最后一个）
             currentPos = itemEnd;
+            if (i < ocrResult.texts.size() - 1) {
+                currentPos += 1;  // 阿里云OCR用\n连接word
+            }
             
             // 如果已经超过结束位置，可以提前退出
             if (currentPos >= endChar) {
@@ -276,6 +308,76 @@ public class OcrDuplicateDetector {
         }
         
         return maxLength;
+    }
+    
+    /**
+     * 根据字符级bbox计算精确的子串bbox
+     * 
+     * @param charBboxes 字符级bbox列表（每个字符一个bbox）
+     * @param startIdx 子串起始字符索引（相对于文字块）
+     * @param endIdx 子串结束字符索引（相对于文字块，不含）
+     * @param blockText 文字块完整文本（用于验证）
+     * @return 子串的bbox [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]，如果计算失败返回null
+     */
+    private static List<double[]> calculatePreciseSubstringBbox(
+            List<List<double[]>> charBboxes,
+            int startIdx,
+            int endIdx,
+            String blockText) {
+        
+        // 边界检查
+        if (charBboxes == null || charBboxes.isEmpty()) {
+            return null;
+        }
+        
+        if (startIdx < 0 || endIdx > charBboxes.size() || startIdx >= endIdx) {
+            LOGGER.warning(String.format(
+                "子串索引越界: [%d,%d), charBboxes.size=%d, blockText.length=%d",
+                startIdx, endIdx, charBboxes.size(), blockText.length()));
+            return null;
+        }
+        
+        // 收集子串范围内所有字符的bbox
+        List<List<double[]>> substringCharBboxes = new ArrayList<>();
+        for (int i = startIdx; i < endIdx; i++) {
+            if (i < charBboxes.size()) {
+                substringCharBboxes.add(charBboxes.get(i));
+            }
+        }
+        
+        if (substringCharBboxes.isEmpty()) {
+            return null;
+        }
+        
+        // 计算包围所有字符的最小外接矩形
+        // bbox格式: [[左上x,左上y], [右上x,右上y], [右下x,右下y], [左下x,左下y]]
+        
+        double minX = Double.MAX_VALUE;
+        double maxX = Double.MIN_VALUE;
+        double minY = Double.MAX_VALUE;
+        double maxY = Double.MIN_VALUE;
+        
+        for (List<double[]> charBbox : substringCharBboxes) {
+            if (charBbox != null && charBbox.size() == 4) {
+                for (double[] vertex : charBbox) {
+                    if (vertex.length == 2) {
+                        minX = Math.min(minX, vertex[0]);
+                        maxX = Math.max(maxX, vertex[0]);
+                        minY = Math.min(minY, vertex[1]);
+                        maxY = Math.max(maxY, vertex[1]);
+                    }
+                }
+            }
+        }
+        
+        // 构造最小外接矩形的4个顶点
+        List<double[]> result = new ArrayList<>();
+        result.add(new double[]{minX, minY}); // 左上
+        result.add(new double[]{maxX, minY}); // 右上
+        result.add(new double[]{maxX, maxY}); // 右下
+        result.add(new double[]{minX, maxY}); // 左下
+        
+        return result;
     }
     
     /**

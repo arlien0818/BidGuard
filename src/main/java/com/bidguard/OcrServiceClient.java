@@ -57,6 +57,10 @@ public class OcrServiceClient {
         public double confidence;
         public List<double[]> bbox; // [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
         public int page;
+        
+        // 字符级位置信息（仅阿里云OCR启用OutputCharInfo时有值）
+        // 每个元素对应text中的一个字符，值为该字符的bbox [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+        public List<List<double[]>> charBboxes;
 
         @Override
         public String toString() {
