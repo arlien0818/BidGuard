@@ -87,33 +87,14 @@ public class BidChecker {
         return t;
     }
 
-    //这个方法目前没有任何地方用到。
-    private static String advancedNormalization(String text) {
-        if (text == null || text.isEmpty()) {
-            return "";
-        }
-        return text
-                .toLowerCase(Locale.ROOT)
-                .replaceAll("[\\p{Punct}&&[^\\u4e00-\\u9fa5]]", "") // 保留中文，去除标点
-                .replaceAll("\\d+", "NUM") // 数字标准化
-                .replaceAll("\\s+", " ")
-                .trim();
-    }
+   
 
     // 常用停用词列表
     private static final Set<String> STOP_WORDS = Set.of(
             "的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都", "一", "一个", "上", "也", "很", "到", "说", "要", "去", "你", "会", "着", "没有", "看", "好", "自己", "这",
             "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "a", "an", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did"
     );
-    //这个方法目前没有任何地方用到。
-    private static String removeStopWords(String text) {
-        if (text == null || text.isEmpty()) {
-            return "";
-        }
-        return Arrays.stream(text.split("\\s+"))
-                .filter(word -> !STOP_WORDS.contains(word.toLowerCase()))
-                .collect(Collectors.joining(" "));
-    }
+
 
     private static Set<String> shingles(String text, int n) {
         Set<String> set = new HashSet<>();
@@ -303,31 +284,7 @@ public class BidChecker {
         }
         return tf;
     }
-    //这个方法目前没有任何地方用到。
-    private static double calculateTFIDF(String term, Map<String, Integer> tf, List<String> corpus) {
-        int termFreq = tf.getOrDefault(term, 0);
-        if (termFreq == 0) {
-            return 0.0;
-        }
-
-        // 计算文档频率（包含该词的文档数）
-        long docCount = corpus.stream()
-                .mapToLong(doc -> doc.contains(term) ? 1 : 0)
-                .sum();
-
-        if (docCount == 0) {
-            return 0.0;
-        }
-
-        // 计算TF（词频标准化）
-        int totalWords = tf.values().stream().mapToInt(Integer::intValue).sum();
-        double tfScore = totalWords > 0 ? (double) termFreq / totalWords : 0.0;
-
-        // 计算IDF（逆文档频率）
-        double idf = Math.log((double) corpus.size() / docCount);
-
-        return tfScore * idf;
-    }
+    
 
 
     // 新的TF-IDF计算方法，使用词频映射而不是原始文本
@@ -910,24 +867,7 @@ public class BidChecker {
      * 将归一化文本中的位置映射回原始文本位置
      * //这个方法目前没有任何地方用到。
      */
-    private static int mapNormalizedPosToOriginal(String original, String normalized, int normPos) {
-        if (normPos <= 0) return 0;
-        if (normPos >= normalized.length()) return original.length();
-        
-        int origPos = 0;
-        int normCount = 0;
-        
-        for (int i = 0; i < original.length() && normCount < normPos; i++) {
-            char c = original.charAt(i);
-            // 模拟normalizeForSimilarity的转换规则
-            if (!Character.isWhitespace(c) || c == ' ') {
-                normCount++;
-            }
-            origPos = i + 1;
-        }
-        
-        return Math.min(origPos, original.length());
-    }
+  
 
     /**
      * 段落级相似度匹配：找出所有高度相似的段落对
