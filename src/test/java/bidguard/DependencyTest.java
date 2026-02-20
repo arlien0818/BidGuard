@@ -1,4 +1,4 @@
-package com.bidguard;
+package bidguard;
 
 import net.sourceforge.tess4j.Tesseract;
 import javax.imageio.ImageIO;

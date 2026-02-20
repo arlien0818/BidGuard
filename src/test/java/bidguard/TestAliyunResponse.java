@@ -1,4 +1,4 @@
-package com.bidguard;
+package bidguard;
 
 import com.aliyun.ocr_api20210707.models.*;
 import com.aliyun.teautil.models.RuntimeOptions;

@@ -2,6 +2,7 @@ package com.bidguard;
 
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.io.File;
 import java.io.IOException;
@@ -21,6 +22,7 @@ public class BidCheckerGUI extends JFrame {
     private JButton compareButton;
     private JButton generateAnnotationDataButton;
     private JButton annotatePdfButton;
+    private JButton testPairGeneratorButton;
     private JTextArea resultArea;
     private JTextArea previewArea;
     
@@ -83,9 +85,9 @@ public class BidCheckerGUI extends JFrame {
         leftPanel.setPreferredSize(new Dimension(300, 0));
         
         // 按钮面板
-        JPanel buttonPanel = new JPanel(new GridLayout(4, 1, 5, 5));
+        JPanel buttonPanel = new JPanel(new GridLayout(5, 1, 5, 5));
         
-        selectFilesButton = new JButton("选择标书文件 (2个)");
+        selectFilesButton = new JButton("选择标书文件（≥2个）");
         selectFilesButton.addActionListener(e -> selectMultipleFiles());
         
         readAllFilesButton = new JButton("读取所选文件");
@@ -100,10 +102,15 @@ public class BidCheckerGUI extends JFrame {
         generateAnnotationDataButton.setEnabled(false);
         generateAnnotationDataButton.addActionListener(e -> generateDuplicateAnnotationData());
         
+        testPairGeneratorButton = new JButton("测试配对生成器");
+        testPairGeneratorButton.setToolTipText("测试从多个文件生成所有可能的配对组合");
+        testPairGeneratorButton.addActionListener(e -> testPairGenerator());
+        
         buttonPanel.add(selectFilesButton);
         buttonPanel.add(readAllFilesButton);
         buttonPanel.add(compareButton);
         buttonPanel.add(generateAnnotationDataButton);
+        buttonPanel.add(testPairGeneratorButton);
         
         leftPanel.add(buttonPanel, BorderLayout.NORTH);
         
@@ -257,25 +264,32 @@ public class BidCheckerGUI extends JFrame {
         return firstCandidate;
     }
 
-    // 功能: 选择多个文件（限制为2个）
+    // 功能: 选择多个文件（至少2个）
     private void selectMultipleFiles() {
         File testFilesDir = getTestFilesDirectory();
         String defaultPath = testFilesDir.exists() ? testFilesDir.getAbsolutePath() : getDefaultDirectory();
         
         JFileChooser fileChooser = new JFileChooser(defaultPath);
+        // 仅展示并允许选择 PDF 文件
+        FileNameExtensionFilter pdfFilter = new FileNameExtensionFilter("PDF 文件 (*.pdf)", "pdf");
+        fileChooser.setFileFilter(pdfFilter);
+        fileChooser.setAcceptAllFileFilterUsed(false);
         fileChooser.setMultiSelectionEnabled(true);
-        fileChooser.setDialogTitle("选择标书文件 (请选择2个PDF文件)");
+        fileChooser.setDialogTitle("选择标书文件（请选择至少2个PDF文件）");
         
         int result = fileChooser.showOpenDialog(this);
         if (result == JFileChooser.APPROVE_OPTION) {
             File[] files = fileChooser.getSelectedFiles();
             
             // 检查文件数量
-            if (files.length != 2) {
+            if (files.length < 2) {
                 JOptionPane.showMessageDialog(this,
-                    "请恰好选择2个PDF文件进行对比！\n\n"
-                    + "当前选择了 " + files.length + " 个文件",
-                    "文件数量错误",
+                    "请至少选择2个PDF文件！\n\n"
+                    + "当前只选择了 " + files.length + " 个文件\n\n"
+                    + "提示：\n"
+                    + "• 选择2个文件可进行对比\n"
+                    + "• 选择多个文件可测试配对生成器",
+                    "文件数量不足",
                     JOptionPane.WARNING_MESSAGE);
                 return;
             }
@@ -308,7 +322,7 @@ public class BidCheckerGUI extends JFrame {
             resultArea.setText("");
             
             // 更新按钮状态
-            readAllFilesButton.setEnabled(true);
+            readAllFilesButton.setEnabled(files.length == 2);
             compareButton.setEnabled(false);
             generateAnnotationDataButton.setEnabled(false);
             annotatePdfButton.setEnabled(false);
@@ -316,6 +330,16 @@ public class BidCheckerGUI extends JFrame {
             LOGGER.info("已选择 " + files.length + " 个文件");
             for (File file : files) {
                 LOGGER.info("  - " + file.getName());
+            }
+            
+            // 提示用户下一步操作
+            if (files.length == 2) {
+                resultArea.append("已选择2个文件，可以进行对比操作。\n");
+                resultArea.append("请点击\"读取所选文件\"按钮继续。\n");
+            } else {
+                resultArea.append(String.format("已选择%d个文件。\n", files.length));
+                resultArea.append("• 如需对比2个文件，请重新选择2个文件\n");
+                resultArea.append("• 可点击\"测试配对生成器\"查看所有可能的配对组合\n");
             }
         }
     }
@@ -1126,6 +1150,113 @@ public class BidCheckerGUI extends JFrame {
         };
         
         worker.execute();
+    }
+
+    // 功能: 测试配对生成器
+    private void testPairGenerator() {
+        LOGGER.info("开始测试配对生成器");
+        
+        // 清空结果区
+        resultArea.setText("");
+        
+        if (selectedFiles.isEmpty()) {
+            resultArea.append("❌ 请先选择文件！\n\n");
+            resultArea.append("点击\"选择标书文件\"按钮，选择多个PDF文件（建议3-5个）。\n");
+            JOptionPane.showMessageDialog(this,
+                "请先选择文件！\n\n请点击\"选择标书文件\"按钮选择多个PDF文件。",
+                "提示", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        
+        if (selectedFiles.size() < 2) {
+            resultArea.append("❌ 至少需要2个文件才能生成配对！\n\n");
+            resultArea.append("当前选择: " + selectedFiles.size() + " 个文件\n");
+            JOptionPane.showMessageDialog(this,
+                "至少需要2个文件才能生成配对！\n\n当前只选择了 " + selectedFiles.size() + " 个文件。",
+                "提示", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        
+        resultArea.append("=".repeat(60) + "\n");
+        resultArea.append("配对生成器测试\n");
+        resultArea.append("=".repeat(60) + "\n\n");
+        
+        // 显示输入文件
+        resultArea.append("📁 输入文件列表 (" + selectedFiles.size() + " 个):\n");
+        for (int i = 0; i < selectedFiles.size(); i++) {
+            File file = selectedFiles.get(i);
+            resultArea.append(String.format("  [%d] %s\n", i + 1, file.getName()));
+        }
+        resultArea.append("\n");
+        
+        // 计算预期配对数量
+        int expectedPairCount = PairGenerator.calculatePairCount(selectedFiles.size());
+        resultArea.append(String.format("📊 预期生成配对数: C(%d,2) = %d\n\n", 
+            selectedFiles.size(), expectedPairCount));
+        
+        // 生成配对
+        LOGGER.info("调用 PairGenerator.generatePairs() 生成配对...");
+        List<FilePair> pairs = PairGenerator.generatePairs(selectedFiles);
+        
+        // 显示生成结果
+        resultArea.append("=".repeat(60) + "\n");
+        resultArea.append("✅ 配对生成结果\n");
+        resultArea.append("=".repeat(60) + "\n\n");
+        resultArea.append(String.format("实际生成配对数: %d\n\n", pairs.size()));
+        
+        // 显示所有配对
+        resultArea.append("配对详情:\n");
+        resultArea.append("-".repeat(60) + "\n");
+        for (int i = 0; i < pairs.size(); i++) {
+            FilePair pair = pairs.get(i);
+            resultArea.append(String.format("配对 #%-2d: %s\n", 
+                i + 1, pair.toString()));
+            resultArea.append(String.format("          ↳ [%s]\n", 
+                pair.getFileA().getName()));
+            resultArea.append(String.format("          ↳ [%s]\n", 
+                pair.getFileB().getName()));
+            if (i < pairs.size() - 1) {
+                resultArea.append("\n");
+            }
+        }
+        resultArea.append("-".repeat(60) + "\n\n");
+        
+        // 验证结果
+        boolean testPassed = (pairs.size() == expectedPairCount);
+        if (testPassed) {
+            resultArea.append("✅ 测试通过！配对数量正确。\n\n");
+        } else {
+            resultArea.append(String.format("❌ 测试失败！预期 %d 个配对，实际生成 %d 个。\n\n", 
+                expectedPairCount, pairs.size()));
+        }
+        
+        // 算法说明
+        resultArea.append("=".repeat(60) + "\n");
+        resultArea.append("算法说明\n");
+        resultArea.append("=".repeat(60) + "\n");
+        resultArea.append("核心逻辑：双层循环\n\n");
+        resultArea.append("for (int i = 0; i < files.size(); i++) {\n");
+        resultArea.append("    for (int j = i + 1; j < files.size(); j++) {\n");
+        resultArea.append("        pairs.add(new FilePair(files.get(i), files.get(j)));\n");
+        resultArea.append("    }\n");
+        resultArea.append("}\n\n");
+        resultArea.append("特点：\n");
+        resultArea.append("  • 避免重复（不会生成 A vs B 又生成 B vs A）\n");
+        resultArea.append("  • 避免自我配对（不会生成 A vs A）\n");
+        resultArea.append("  • 保证顺序（i < j）\n\n");
+        
+        // 滚动到顶部
+        resultArea.setCaretPosition(0);
+        
+        LOGGER.info("配对生成器测试完成，生成 " + pairs.size() + " 个配对");
+        
+        // 显示弹窗
+        JOptionPane.showMessageDialog(this,
+            String.format("配对生成器测试完成！\n\n" +
+                "从 %d 个文件生成了 %d 个配对组合\n\n" +
+                "请查看结果区域了解详细信息。",
+                selectedFiles.size(), pairs.size()),
+            "测试完成", JOptionPane.INFORMATION_MESSAGE);
     }
 
     // 功能: 启动 Swing 应用入口
