@@ -1,0 +1,71 @@
+﻿[INFO] Scanning for projects...
+[INFO] 
+[INFO] ---------------------< com.bidguard:bidguard-core >---------------------
+[INFO] Building bidguard-core 1.0-SNAPSHOT
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- maven-clean-plugin:2.5:clean (default-clean) @ bidguard-core ---
+[INFO] Deleting D:\work\Project\BidGuard\target
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ bidguard-core ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory D:\work\Project\BidGuard\src\main\resources
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.1:compile (default-compile) @ bidguard-core ---
+[INFO] Changes detected - recompiling the module!
+[INFO] Compiling 23 source files to D:\work\Project\BidGuard\target\classes
+[INFO] -------------------------------------------------------------
+[ERROR] COMPILATION ERROR : 
+[INFO] -------------------------------------------------------------
+[ERROR] /D:/work/Project/BidGuard/src/main/java/com/bidguard/DebugFragment4Detail.java:[63,46] 找不到符号
+  符号:   变量 blocks
+  位置: 类 com.bidguard.OcrServiceClient.OcrPage
+[ERROR] /D:/work/Project/BidGuard/src/main/java/com/bidguard/DebugFragment4Detail.java:[64,39] 找不到符号
+  符号:   类 TextItem
+  位置: 类 com.bidguard.OcrServiceClient.OcrResult
+[ERROR] /D:/work/Project/BidGuard/src/main/java/com/bidguard/DebugFragment4Detail.java:[64,73] 找不到符号
+  符号:   变量 blocks
+  位置: 类 com.bidguard.OcrServiceClient.OcrPage
+[ERROR] /D:/work/Project/BidGuard/src/main/java/com/bidguard/DebugFragment4Detail.java:[103,46] 找不到符号
+  符号:   变量 blocks
+  位置: 类 com.bidguard.OcrServiceClient.OcrPage
+[ERROR] /D:/work/Project/BidGuard/src/main/java/com/bidguard/DebugFragment4Detail.java:[104,39] 找不到符号
+  符号:   类 TextItem
+  位置: 类 com.bidguard.OcrServiceClient.OcrResult
+[ERROR] /D:/work/Project/BidGuard/src/main/java/com/bidguard/DebugFragment4Detail.java:[104,73] 找不到符号
+  符号:   变量 blocks
+  位置: 类 com.bidguard.OcrServiceClient.OcrPage
+[INFO] 6 errors 
+[INFO] -------------------------------------------------------------
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  14.918 s
+[INFO] Finished at: 2026-02-18T19:41:41+08:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.1:compile (default-compile) on project bidguard-core: Compilation failure: Compilation failure: 
+[ERROR] /D:/work/Project/BidGuard/src/main/java/com/bidguard/DebugFragment4Detail.java:[63,46] 找不到符号
+[ERROR]   符号:   变量 blocks
+[ERROR]   位置: 类 com.bidguard.OcrServiceClient.OcrPage
+[ERROR] /D:/work/Project/BidGuard/src/main/java/com/bidguard/DebugFragment4Detail.java:[64,39] 找不到符号
+[ERROR]   符号:   类 TextItem
+[ERROR]   位置: 类 com.bidguard.OcrServiceClient.OcrResult
+[ERROR] /D:/work/Project/BidGuard/src/main/java/com/bidguard/DebugFragment4Detail.java:[64,73] 找不到符号
+[ERROR]   符号:   变量 blocks
+[ERROR]   位置: 类 com.bidguard.OcrServiceClient.OcrPage
+[ERROR] /D:/work/Project/BidGuard/src/main/java/com/bidguard/DebugFragment4Detail.java:[103,46] 找不到符号
+[ERROR]   符号:   变量 blocks
+[ERROR]   位置: 类 com.bidguard.OcrServiceClient.OcrPage
+[ERROR] /D:/work/Project/BidGuard/src/main/java/com/bidguard/DebugFragment4Detail.java:[104,39] 找不到符号
+[ERROR]   符号:   类 TextItem
+[ERROR]   位置: 类 com.bidguard.OcrServiceClient.OcrResult
+[ERROR] /D:/work/Project/BidGuard/src/main/java/com/bidguard/DebugFragment4Detail.java:[104,73] 找不到符号
+[ERROR]   符号:   变量 blocks
+[ERROR]   位置: 类 com.bidguard.OcrServiceClient.OcrPage
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException

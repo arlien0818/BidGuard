@@ -13,24 +13,21 @@ import java.util.logging.Logger;
 public class BidCheckerGUI extends JFrame {
     private static final Logger LOGGER = Logger.getLogger(BidCheckerGUI.class.getName());
 
-    // 文件对比组件
-    private JTextField file1Field;
-    private JTextField file2Field;
-    private JButton selectFile1Button;
-    private JButton selectFile2Button;
-    private JButton readFile1Button;  // 新增：读取文件1按钮
-    private JButton readFile2Button;  // 新增：读取文件2按钮
+    // 批量文件对比组件
+    private DefaultListModel<String> fileListModel;
+    private JList<String> fileList;
+    private JButton selectFilesButton;
+    private JButton readAllFilesButton;
     private JButton compareButton;
-    private JButton generateAnnotationDataButton;  // 新增：生成查重标注数据按钮
-    private JButton annotatePdfButton;  // 新增：执行PDF标注按钮
+    private JButton generateAnnotationDataButton;
+    private JButton annotatePdfButton;
     private JTextArea resultArea;
-    private File file1;
-    private File file2;
-    private String file1Text;  // 新增：存储文件1已读取的文本
-    private String file2Text;  // 新增：存储文件2已读取的文本
-    private File latestDetectionJsonFile;  // 新增：最新生成的查重JSON文件
-    private JTextArea file1PreviewArea;
-    private JTextArea file2PreviewArea;
+    private JTextArea previewArea;
+    
+    // 文件数据
+    private List<File> selectedFiles = new ArrayList<>();
+    private Map<File, String> fileTexts = new HashMap<>();
+    private File latestDetectionJsonFile;
 
     // 公章去除组件
     // private JTextField imageFileField;
@@ -78,111 +75,84 @@ public class BidCheckerGUI extends JFrame {
 
     // 功能: 构建文件对比选项卡界面布局
     private JPanel createComparePanel() {
-        JPanel panel = new JPanel(new BorderLayout());
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        // === 文件1组 ===
-        JPanel file1Panel = new JPanel(new BorderLayout(5, 5));
-        file1Panel.setBorder(BorderFactory.createTitledBorder("文件1"));
-
-        file1Field = new JTextField();
-        file1Field.setEditable(false);
-
-        JPanel file1ButtonPanel = new JPanel(new GridLayout(1, 2, 5, 0));
-        selectFile1Button = new JButton("选择文件");
-        selectFile1Button.addActionListener(e -> chooseFile(1));
-        readFile1Button = new JButton("读取");
-        readFile1Button.setEnabled(false);
-        readFile1Button.addActionListener(e -> readFile(1));
-        file1ButtonPanel.add(selectFile1Button);
-        file1ButtonPanel.add(readFile1Button);
-
-        JPanel file1TopPanel = new JPanel(new BorderLayout(5, 0));
-        file1TopPanel.add(file1Field, BorderLayout.CENTER);
-        file1TopPanel.add(file1ButtonPanel, BorderLayout.EAST);
-
-        file1PreviewArea = createPreviewTextArea();
-        JScrollPane file1PreviewScroll = new JScrollPane(file1PreviewArea);
-        file1PreviewScroll.setBorder(BorderFactory.createTitledBorder("文本预览"));
-
-        file1Panel.add(file1TopPanel, BorderLayout.NORTH);
-        file1Panel.add(file1PreviewScroll, BorderLayout.CENTER);
-
-        // === 文件2组 ===
-        JPanel file2Panel = new JPanel(new BorderLayout(5, 5));
-        file2Panel.setBorder(BorderFactory.createTitledBorder("文件2"));
-
-        file2Field = new JTextField();
-        file2Field.setEditable(false);
-
-        JPanel file2ButtonPanel = new JPanel(new GridLayout(1, 2, 5, 0));
-        selectFile2Button = new JButton("选择文件");
-        selectFile2Button.addActionListener(e -> chooseFile(2));
-        readFile2Button = new JButton("读取");
-        readFile2Button.setEnabled(false);
-        readFile2Button.addActionListener(e -> readFile(2));
-        file2ButtonPanel.add(selectFile2Button);
-        file2ButtonPanel.add(readFile2Button);
-
-        JPanel file2TopPanel = new JPanel(new BorderLayout(5, 0));
-        file2TopPanel.add(file2Field, BorderLayout.CENTER);
-        file2TopPanel.add(file2ButtonPanel, BorderLayout.EAST);
-
-        file2PreviewArea = createPreviewTextArea();
-        JScrollPane file2PreviewScroll = new JScrollPane(file2PreviewArea);
-        file2PreviewScroll.setBorder(BorderFactory.createTitledBorder("文本预览"));
-
-        file2Panel.add(file2TopPanel, BorderLayout.NORTH);
-        file2Panel.add(file2PreviewScroll, BorderLayout.CENTER);
-
-        // === 预览区分割 ===
-        JSplitPane previewSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
-            file1Panel, file2Panel);
-        previewSplitPane.setResizeWeight(0.5);
-        previewSplitPane.setContinuousLayout(true);
-
-        // === 对比按钮和结果区 ===
-        JPanel bottomPanel = new JPanel(new BorderLayout(5, 5));
-
-        compareButton = new JButton("开始对比");
+        // === 左侧：文件选择和列表 ===
+        JPanel leftPanel = new JPanel(new BorderLayout(5, 5));
+        leftPanel.setPreferredSize(new Dimension(300, 0));
+        
+        // 按钮面板
+        JPanel buttonPanel = new JPanel(new GridLayout(4, 1, 5, 5));
+        
+        selectFilesButton = new JButton("选择标书文件 (2个)");
+        selectFilesButton.addActionListener(e -> selectMultipleFiles());
+        
+        readAllFilesButton = new JButton("读取所选文件");
+        readAllFilesButton.setEnabled(false);
+        readAllFilesButton.addActionListener(e -> readAllFiles());
+        
+        compareButton = new JButton("一键对比");
         compareButton.setEnabled(false);
         compareButton.addActionListener(e -> compareFiles());
-        compareButton.setPreferredSize(new Dimension(120, 30));
         
-        // 新增：生成查重标注数据按钮
-        JButton generateAnnotationDataButton = new JButton("生成查重标注数据");
+        generateAnnotationDataButton = new JButton("生成查重标注数据");
         generateAnnotationDataButton.setEnabled(false);
         generateAnnotationDataButton.addActionListener(e -> generateDuplicateAnnotationData());
-        generateAnnotationDataButton.setPreferredSize(new Dimension(160, 30));
         
-        // 新增：执行PDF标注按钮
-        JButton annotatePdfButton = new JButton("执行PDF标注");
+        buttonPanel.add(selectFilesButton);
+        buttonPanel.add(readAllFilesButton);
+        buttonPanel.add(compareButton);
+        buttonPanel.add(generateAnnotationDataButton);
+        
+        leftPanel.add(buttonPanel, BorderLayout.NORTH);
+        
+        // 文件列表
+        fileListModel = new DefaultListModel<>();
+        fileList = new JList<>(fileListModel);
+        fileList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        JScrollPane fileListScroll = new JScrollPane(fileList);
+        fileListScroll.setBorder(BorderFactory.createTitledBorder("已选文件"));
+        
+        leftPanel.add(fileListScroll, BorderLayout.CENTER);
+
+        // === 右侧：预览区 ===
+        JPanel rightPanel = new JPanel(new BorderLayout(5, 5));
+        
+        previewArea = createPreviewTextArea();
+        JScrollPane previewScroll = new JScrollPane(previewArea);
+        previewScroll.setBorder(BorderFactory.createTitledBorder("文本预览"));
+
+        
+        rightPanel.add(previewScroll, BorderLayout.CENTER);
+        
+        // === 底部：结果区和标注按钮 ===
+        JPanel bottomPanel = new JPanel(new BorderLayout(5, 5));
+        
+        annotatePdfButton = new JButton("一键标注PDF");
         annotatePdfButton.setEnabled(false);
         annotatePdfButton.addActionListener(e -> annotatePdfs());
-        annotatePdfButton.setPreferredSize(new Dimension(120, 30));
+        annotatePdfButton.setPreferredSize(new Dimension(150, 30));
         annotatePdfButton.setToolTipText("先生成查重标注数据，检查无误后再执行标注");
         
-        // 将按钮引用保存为成员变量，以便后续更新状态
-        this.generateAnnotationDataButton = generateAnnotationDataButton;
-        this.annotatePdfButton = annotatePdfButton;
-
-        JPanel compareButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
-        compareButtonPanel.add(compareButton);
-        compareButtonPanel.add(generateAnnotationDataButton);
-        compareButtonPanel.add(annotatePdfButton);
-
+        JPanel annotatePanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        annotatePanel.add(annotatePdfButton);
+        
         resultArea = new JTextArea();
         resultArea.setEditable(false);
         JScrollPane resultScrollPane = new JScrollPane(resultArea);
         resultScrollPane.setBorder(BorderFactory.createTitledBorder("对比结果"));
-        resultScrollPane.setPreferredSize(new Dimension(0, 150));
-
-        bottomPanel.add(compareButtonPanel, BorderLayout.NORTH);
+        resultScrollPane.setPreferredSize(new Dimension(0, 200));
+        
+        bottomPanel.add(annotatePanel, BorderLayout.NORTH);
         bottomPanel.add(resultScrollPane, BorderLayout.CENTER);
+        
+        rightPanel.add(bottomPanel, BorderLayout.SOUTH);
 
-        // === 整体布局 ===
-        JSplitPane mainSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
-            previewSplitPane, bottomPanel);
-        mainSplitPane.setResizeWeight(0.7);
+        // === 整体布局：左右分割 ===
+        JSplitPane mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
+            leftPanel, rightPanel);
+        mainSplitPane.setResizeWeight(0.3);
         mainSplitPane.setContinuousLayout(true);
 
         panel.add(mainSplitPane, BorderLayout.CENTER);
@@ -199,7 +169,7 @@ public class BidCheckerGUI extends JFrame {
         progressBar.setStringPainted(true);
         progressBar.setString("就绪");
 
-        JLabel versionLabel = new JLabel("BidGuard v2.06 - 两文档查重算法优化");
+        JLabel versionLabel = new JLabel("BidGuard v2.07 - 批量文件对比");
 
         statusPanel.add(progressBar, BorderLayout.CENTER);
         statusPanel.add(versionLabel, BorderLayout.EAST);
@@ -269,26 +239,7 @@ public class BidCheckerGUI extends JFrame {
 
     // 功能: 将默认测试文件绑定到输入框（支持PDF/Word/Excel/TXT）
     private void applyDefaultFileSelections() {
-        if (file1Field == null || file2Field == null) {
-            return;
-        }
-        File baseDir = getTestFilesDirectory();
-        // 优先选择PDF，其次Word，再次TXT
-        File defaultFile1 = resolveDefaultTestFile(baseDir, "text1.pdf", "test1.pdf", "test1.docx", "test1.txt");
-        File defaultFile2 = resolveDefaultTestFile(baseDir, "text2.pdf", "test2.pdf", "test2.docx", "test2.txt");
-
-        // 只设置文件路径，不自动读取
-        if (defaultFile1.exists()) {
-            file1 = defaultFile1;
-            file1Field.setText(defaultFile1.getAbsolutePath());
-            readFile1Button.setEnabled(true);
-        }
-
-        if (defaultFile2.exists()) {
-            file2 = defaultFile2;
-            file2Field.setText(defaultFile2.getAbsolutePath());
-            readFile2Button.setEnabled(true);
-        }
+        // 不再自动加载默认文件，由用户手动选择
     }
 
     // 功能: 根据优先和备选文件名解析默认测试文件（支持多个候选）
@@ -306,109 +257,149 @@ public class BidCheckerGUI extends JFrame {
         return firstCandidate;
     }
 
-    // 功能: 打开文件选择器并记录用户选中的对比文件
-    private void chooseFile(int fileNumber) {
+    // 功能: 选择多个文件（限制为2个）
+    private void selectMultipleFiles() {
         File testFilesDir = getTestFilesDirectory();
         String defaultPath = testFilesDir.exists() ? testFilesDir.getAbsolutePath() : getDefaultDirectory();
+        
         JFileChooser fileChooser = new JFileChooser(defaultPath);
+        fileChooser.setMultiSelectionEnabled(true);
+        fileChooser.setDialogTitle("选择标书文件 (请选择2个PDF文件)");
+        
         int result = fileChooser.showOpenDialog(this);
         if (result == JFileChooser.APPROVE_OPTION) {
-            if (fileNumber == 1) {
-                file1 = fileChooser.getSelectedFile();
-                file1Field.setText(file1.getAbsolutePath());
-                file1Text = null;  // 清空已读取的文本
-                clearPreviewArea(file1PreviewArea);
-                readFile1Button.setEnabled(true);  // 启用读取按钮
-                LOGGER.info(() -> "已选择文件1: " + file1.getName());
-            } else {
-                file2 = fileChooser.getSelectedFile();
-                file2Field.setText(file2.getAbsolutePath());
-                file2Text = null;  // 清空已读取的文本
-                clearPreviewArea(file2PreviewArea);
-                readFile2Button.setEnabled(true);  // 启用读取按钮
-                LOGGER.info(() -> "已选择文件2: " + file2.getName());
+            File[] files = fileChooser.getSelectedFiles();
+            
+            // 检查文件数量
+            if (files.length != 2) {
+                JOptionPane.showMessageDialog(this,
+                    "请恰好选择2个PDF文件进行对比！\n\n"
+                    + "当前选择了 " + files.length + " 个文件",
+                    "文件数量错误",
+                    JOptionPane.WARNING_MESSAGE);
+                return;
             }
-            updateCompareButtonState();  // 更新对比按钮状态
+            
+            // 检查文件格式
+            for (File file : files) {
+                if (!file.getName().toLowerCase().endsWith(".pdf")) {
+                    JOptionPane.showMessageDialog(this,
+                        "请选择PDF文件！\n\n"
+                        + "文件 '" + file.getName() + "' 不是PDF格式",
+                        "文件格式错误",
+                        JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+            }
+            
+            // 更新文件列表
+            selectedFiles.clear();
+            selectedFiles.addAll(Arrays.asList(files));
+            fileTexts.clear();
+            
+            // 更新显示
+            fileListModel.clear();
+            for (File file : selectedFiles) {
+                fileListModel.addElement(file.getName());
+            }
+            
+            // 清空预览区
+            previewArea.setText("");
+            resultArea.setText("");
+            
+            // 更新按钮状态
+            readAllFilesButton.setEnabled(true);
+            compareButton.setEnabled(false);
+            generateAnnotationDataButton.setEnabled(false);
+            annotatePdfButton.setEnabled(false);
+            
+            LOGGER.info("已选择 " + files.length + " 个文件");
+            for (File file : files) {
+                LOGGER.info("  - " + file.getName());
+            }
         }
     }
-
-    // 功能: 根据两个文件是否都已读取来更新对比按钮状态
-    private void updateCompareButtonState() {
-        boolean bothFilesRead = file1Text != null && file2Text != null;
-        compareButton.setEnabled(bothFilesRead);
-        
-        // 只有两个文件都是PDF才能生成查重标注数据
-        boolean bothPdf = file1 != null && file2 != null &&
-                          file1.getName().toLowerCase().endsWith(".pdf") &&
-                          file2.getName().toLowerCase().endsWith(".pdf");
-        generateAnnotationDataButton.setEnabled(bothFilesRead && bothPdf);
-    }
-
-    // 功能: 读取文件内容（支持PDF/Word/Excel/TXT，PDF自动识别扫描件并调用OCR）
-    private void readFile(int fileNumber) {
-        File file = (fileNumber == 1) ? file1 : file2;
-        JTextArea previewArea = (fileNumber == 1) ? file1PreviewArea : file2PreviewArea;
-        JButton readButton = (fileNumber == 1) ? readFile1Button : readFile2Button;
-        String displayName = "文件" + fileNumber;
-
-        if (file == null || !file.exists()) {
-            JOptionPane.showMessageDialog(this,
-                displayName + " 不存在: " + (file != null ? file.getAbsolutePath() : ""),
-                "错误", JOptionPane.ERROR_MESSAGE);
+    
+    // 功能: 读取所有选中的文件
+    private void readAllFiles() {
+        if (selectedFiles.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "请先选择文件！", "提示", JOptionPane.WARNING_MESSAGE);
             return;
         }
-
-        // 禁用读取按钮，防止重复点击
-        readButton.setEnabled(false);
+        
+        if (selectedFiles.size() != 2) {
+            JOptionPane.showMessageDialog(this, "请选择2个文件！", "提示", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        
+        readAllFilesButton.setEnabled(false);
         progressBar.setIndeterminate(true);
-        progressBar.setString("正在读取 " + displayName + "...");
-
-        // 使用SwingWorker异步读取文件
-        SwingWorker<String, Void> worker = new SwingWorker<>() {
+        progressBar.setString("正在读取文件...");
+        
+        // 使用SwingWorker异步读取
+        SwingWorker<Void, String> worker = new SwingWorker<>() {
             @Override
-            protected String doInBackground() throws Exception {
-                return extractTextFromFile(file, displayName);
+            protected Void doInBackground() throws Exception {
+                fileTexts.clear();
+                
+                for (int i = 0; i < selectedFiles.size(); i++) {
+                    File file = selectedFiles.get(i);
+                    String displayName = "文件" + (i + 1);
+                    
+                    publish("正在读取 " + displayName + ": " + file.getName() + "...");
+                    
+                    String text = extractTextFromFile(file, displayName);
+                    fileTexts.put(file, text);
+                    
+                    publish("✓ " + displayName + " 读取完成: " + text.length() + " 字符");
+                }
+                
+                return null;
             }
-
+            
+            @Override
+            protected void process(List<String> chunks) {
+                for (String msg : chunks) {
+                    resultArea.append(msg + "\n");
+                }
+                resultArea.setCaretPosition(resultArea.getDocument().getLength());
+            }
+            
             @Override
             protected void done() {
                 try {
-                    String text = get();
-
-                    if (fileNumber == 1) {
-                        file1Text = text;
-                    } else {
-                        file2Text = text;
+                    get();
+                    resultArea.append("\n所有文件读取完成！\n");
+                    
+                    // 显示第一个文件的预览
+                    if (!selectedFiles.isEmpty()) {
+                        File firstFile = selectedFiles.get(0);
+                        String text = fileTexts.get(firstFile);
+                        if (text != null) {
+                            previewArea.setText("文件1 - " + firstFile.getName() + "\n\n" + text);
+                            previewArea.setCaretPosition(0);
+                        }
                     }
-
-                    // 更新预览区
-                    if (text == null || text.trim().isEmpty()) {
-                        previewArea.setText(displayName + " - 未能提取到文本内容");
-                    } else {
-                        previewArea.setText(text);
-                        previewArea.setCaretPosition(0);
-                    }
-
-                    LOGGER.info(() -> String.format("%s 读取完成，文本长度: %d 字符",
-                        displayName, text != null ? text.length() : 0));
-
-                    // 更新对比按钮状态
-                    updateCompareButtonState();
-
+                    
+                    // 更新按钮状态
+                    compareButton.setEnabled(true);
+                    generateAnnotationDataButton.setEnabled(true);
+                    
                 } catch (Exception ex) {
-                    LOGGER.log(Level.SEVERE, "读取" + displayName + "失败", ex);
-                    previewArea.setText(displayName + " 读取失败：" + ex.getMessage());
+                    LOGGER.log(Level.SEVERE, "读取文件失败", ex);
+                    resultArea.append("\n读取失败: " + ex.getMessage() + "\n");
                     JOptionPane.showMessageDialog(BidCheckerGUI.this,
-                        displayName + " 读取失败: " + ex.getMessage(),
-                        "错误", JOptionPane.ERROR_MESSAGE);
+                        "读取失败: " + ex.getMessage(),
+                        "错误",
+                        JOptionPane.ERROR_MESSAGE);
                 } finally {
-                    readButton.setEnabled(true);
+                    readAllFilesButton.setEnabled(true);
                     progressBar.setIndeterminate(false);
                     progressBar.setString("就绪");
                 }
             }
         };
-
+        
         worker.execute();
     }
 
@@ -483,9 +474,16 @@ public class BidCheckerGUI extends JFrame {
 
     // 功能: 对比两个已读取的文本
     private void compareFiles() {
-        if (file1Text == null || file2Text == null) {
+        if (fileTexts.size() != 2) {
             JOptionPane.showMessageDialog(this,
                 "请先读取两个文件！",
+                "提示", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        
+        if (selectedFiles.size() != 2) {
+            JOptionPane.showMessageDialog(this,
+                "请选择两个文件！",
                 "提示", JOptionPane.WARNING_MESSAGE);
             return;
         }
@@ -500,8 +498,14 @@ public class BidCheckerGUI extends JFrame {
             protected String doInBackground() throws Exception {
                 LOGGER.info("开始对比文本内容");
 
+                // 获取两个文件的文本
+                File file1 = selectedFiles.get(0);
+                File file2 = selectedFiles.get(1);
+                String text1 = fileTexts.get(file1);
+                String text2 = fileTexts.get(file2);
+                
                 // 直接对比已读取的文本内容
-                return BidChecker.compareTexts(file1Text, file2Text);
+                return BidChecker.compareTexts(text1, text2);
             }
 
             @Override
@@ -877,11 +881,14 @@ public class BidCheckerGUI extends JFrame {
 
     // 功能: 生成查重标注数据（仅支持PDF文件）
     private void generateDuplicateAnnotationData() {
-        if (file1 == null || file2 == null) {
+        if (selectedFiles.size() != 2) {
             JOptionPane.showMessageDialog(this,
-                "请先选择并读取两个文件！", "提示", JOptionPane.WARNING_MESSAGE);
+                "请先选择两个文件！", "提示", JOptionPane.WARNING_MESSAGE);
             return;
         }
+        
+        File file1 = selectedFiles.get(0);
+        File file2 = selectedFiles.get(1);
         
         // 检查是否都是PDF文件
         if (!file1.getName().toLowerCase().endsWith(".pdf") ||
@@ -1001,12 +1008,15 @@ public class BidCheckerGUI extends JFrame {
             return;
         }
         
-        if (file1 == null || file2 == null) {
+        if (selectedFiles.size() != 2) {
             JOptionPane.showMessageDialog(this,
-                "原始PDF文件引用丢失！\n请重新选择文件并生成查重数据。",
+                "请先选择两个文件！",
                 "错误", JOptionPane.ERROR_MESSAGE);
             return;
         }
+        
+        File file1 = selectedFiles.get(0);
+        File file2 = selectedFiles.get(1);
         
         // 确认执行标注
         int confirm = JOptionPane.showConfirmDialog(this,
