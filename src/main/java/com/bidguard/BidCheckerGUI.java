@@ -23,6 +23,7 @@ public class BidCheckerGUI extends JFrame {
     private JButton generateAnnotationDataButton;
     private JButton annotatePdfButton;
     private JButton testPairGeneratorButton;
+    private JButton batchRunButton;
     private JTextArea resultArea;
     private JTextArea previewArea;
     
@@ -85,7 +86,7 @@ public class BidCheckerGUI extends JFrame {
         leftPanel.setPreferredSize(new Dimension(300, 0));
         
         // 按钮面板
-        JPanel buttonPanel = new JPanel(new GridLayout(5, 1, 5, 5));
+        JPanel buttonPanel = new JPanel(new GridLayout(6, 1, 5, 5));
         
         selectFilesButton = new JButton("选择标书文件（≥2个）");
         selectFilesButton.addActionListener(e -> selectMultipleFiles());
@@ -105,12 +106,18 @@ public class BidCheckerGUI extends JFrame {
         testPairGeneratorButton = new JButton("测试配对生成器");
         testPairGeneratorButton.setToolTipText("测试从多个文件生成所有可能的配对组合");
         testPairGeneratorButton.addActionListener(e -> testPairGenerator());
+
+        batchRunButton = new JButton("批量执行查重并标注");
+        batchRunButton.setToolTipText("对所有生成的配对依次执行 OCR/查重/保存/标注（会缓存 OCR）");
+        batchRunButton.setEnabled(false);
+        batchRunButton.addActionListener(e -> runBatchDuplicateAndAnnotate());
         
         buttonPanel.add(selectFilesButton);
         buttonPanel.add(readAllFilesButton);
         buttonPanel.add(compareButton);
         buttonPanel.add(generateAnnotationDataButton);
         buttonPanel.add(testPairGeneratorButton);
+        buttonPanel.add(batchRunButton);
         
         leftPanel.add(buttonPanel, BorderLayout.NORTH);
         
@@ -322,10 +329,11 @@ public class BidCheckerGUI extends JFrame {
             resultArea.setText("");
             
             // 更新按钮状态
-            readAllFilesButton.setEnabled(files.length == 2);
+                readAllFilesButton.setEnabled(files.length == 2);
             compareButton.setEnabled(false);
             generateAnnotationDataButton.setEnabled(false);
             annotatePdfButton.setEnabled(false);
+                batchRunButton.setEnabled(files.length >= 2);
             
             LOGGER.info("已选择 " + files.length + " 个文件");
             for (File file : files) {
@@ -1257,6 +1265,74 @@ public class BidCheckerGUI extends JFrame {
                 "请查看结果区域了解详细信息。",
                 selectedFiles.size(), pairs.size()),
             "测试完成", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    // 功能: 批量执行查重并标注（生成 pairs -> OCR(缓存) -> detect -> save JSON -> annotate）
+    private void runBatchDuplicateAndAnnotate() {
+        if (selectedFiles.size() < 2) {
+            JOptionPane.showMessageDialog(this, "请至少选择2个PDF文件！", "提示", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        // 构造 PdfTask 列表
+        List<PdfTask> tasks = new ArrayList<>();
+        for (File f : selectedFiles) tasks.add(new PdfTask(f));
+
+        // 清空结果区并开始任务
+        resultArea.setText("");
+        progressBar.setIndeterminate(true);
+        progressBar.setString("正在批量执行查重并标注...");
+
+        // 禁用相关按钮
+        batchRunButton.setEnabled(false);
+        selectFilesButton.setEnabled(false);
+        readAllFilesButton.setEnabled(false);
+
+        SwingWorker<Map<FilePair, File>, String> worker = new SwingWorker<>() {
+            @Override
+            protected Map<FilePair, File> doInBackground() {
+                publish("开始批量处理...\n");
+                Map<FilePair, File> results = BatchDuplicateRunner.runBatchDuplicateCheck(tasks);
+                publish(String.format("批量处理完成，生成 %d 个 JSON 结果。\n", results.size()));
+                return results;
+            }
+
+            @Override
+            protected void process(List<String> chunks) {
+                for (String m : chunks) {
+                    resultArea.append(m);
+                }
+                resultArea.setCaretPosition(resultArea.getDocument().getLength());
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    Map<FilePair, File> map = get();
+                    resultArea.append("\n处理汇总:\n");
+                    resultArea.append("-".repeat(60) + "\n");
+                    for (Map.Entry<FilePair, File> e : map.entrySet()) {
+                        resultArea.append(String.format("%s -> %s\n", e.getKey().toString(), e.getValue().getName()));
+                    }
+                    resultArea.append("-".repeat(60) + "\n");
+                    JOptionPane.showMessageDialog(BidCheckerGUI.this,
+                        String.format("批量处理完成：共生成 %d 个结果文件", map.size()),
+                        "完成", JOptionPane.INFORMATION_MESSAGE);
+                } catch (Exception ex) {
+                    LOGGER.log(Level.SEVERE, "批量处理失败", ex);
+                    JOptionPane.showMessageDialog(BidCheckerGUI.this,
+                        "批量处理失败: " + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+                } finally {
+                    progressBar.setIndeterminate(false);
+                    progressBar.setString("就绪");
+                    batchRunButton.setEnabled(true);
+                    selectFilesButton.setEnabled(true);
+                    readAllFilesButton.setEnabled(selectedFiles.size() == 2);
+                }
+            }
+        };
+
+        worker.execute();
     }
 
     // 功能: 启动 Swing 应用入口
