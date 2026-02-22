@@ -111,14 +111,18 @@ public class BidChecker {
         }
 
         // 如果文本中几乎没有空格（典型中文），用字符 n-gram
-        boolean looksLikeNoSpaceLanguage = t.indexOf(' ') < 0;
+        // 统计空格占比，如果空格很少（<5%），认为是无空格语言（如中文）
+        long spaceCount = t.chars().filter(ch -> ch == ' ').count();
+        boolean looksLikeNoSpaceLanguage = (spaceCount * 100.0 / t.length()) < 5.0;
 
         if (looksLikeNoSpaceLanguage) {
+            // 对中文等无空格语言：去除所有空格后，采用逐字符滑动窗口生成 n-gram
             String compact = t.replace(" ", "");
             if (compact.length() < n) {
                 set.add(compact);
                 return set;
             }
+            // 逐字符滑动窗口生成 n-gram
             for (int i = 0; i <= compact.length() - n; i++) {
                 set.add(compact.substring(i, i + n));
             }
@@ -148,25 +152,57 @@ public class BidChecker {
     /**
      * Jaccard 相似度：|A∩B| / |A∪B|，结果范围 0..100
      * 对中文更稳：使用字符 3-gram；对英文/有空格文本：使用 token 3-gram
+     * 打印调试信息：nGram总数、Set去重后大小、交集大小、并集大小
      */
     public static double similarityJaccardNGram(String a, String b, int n) {
+        String normA = normalizeForSimilarity(a);
+        String normB = normalizeForSimilarity(b);
+        
+        // 先生成 n-gram 集合
         Set<String> sa = shingles(a, n);
         Set<String> sb = shingles(b, n);
 
-        if (sa.isEmpty() && sb.isEmpty()) {
-            return 0.0;
-        }
+        // 计算 n-gram 总数（理论上，去除空格后的字符数 - n + 1）
+        String compactA = normA.replace(" ", "");
+        String compactB = normB.replace(" ", "");
+        int totalNGramA = Math.max(0, compactA.length() - n + 1);
+        int totalNGramB = Math.max(0, compactB.length() - n + 1);
 
+        // 计算交集和并集
+        Set<String> intersection = new HashSet<>(sa);
+        intersection.retainAll(sb);
+        
         Set<String> union = new HashSet<>(sa);
         union.addAll(sb);
 
-        Set<String> intersection = new HashSet<>(sa);
-        intersection.retainAll(sb);
-
-        if (union.isEmpty()) {
+        // 打印调试信息
+        System.out.println("=== Jaccard N-Gram 调试信息 (n=" + n + ") ===");
+        System.out.println("文本A归一化后长度: " + compactA.length() + " 字符");
+        System.out.println("文本B归一化后长度: " + compactB.length() + " 字符");
+        System.out.println("文本A理论nGram总数: " + totalNGramA);
+        System.out.println("文本B理论nGram总数: " + totalNGramB);
+        System.out.println("文本A Set去重后大小: " + sa.size());
+        System.out.println("文本B Set去重后大小: " + sb.size());
+        System.out.println("交集大小 |A∩B|: " + intersection.size());
+        System.out.println("并集大小 |A∪B|: " + union.size());
+        
+        if (sa.isEmpty() && sb.isEmpty()) {
+            System.out.println("Jaccard相似度: 0.0% (两个集合都为空)");
+            System.out.println("=====================================\n");
             return 0.0;
         }
-        return intersection.size() * 100.0 / union.size();
+
+        if (union.isEmpty()) {
+            System.out.println("Jaccard相似度: 0.0% (并集为空)");
+            System.out.println("=====================================\n");
+            return 0.0;
+        }
+        
+        double similarity = intersection.size() * 100.0 / union.size();
+        System.out.println("Jaccard相似度: " + String.format("%.2f", similarity) + "%");
+        System.out.println("=====================================\n");
+        
+        return similarity;
     }
 
     // 功能: 计算两个集合的交集大小（null/空集安全）
