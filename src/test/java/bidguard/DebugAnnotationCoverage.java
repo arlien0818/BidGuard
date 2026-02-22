@@ -1,4 +1,6 @@
-package com.bidguard;
+package bidguard;
+
+import com.bidguard.OcrDuplicateDetector;
 
 import com.google.gson.Gson;
 import java.io.*;

@@ -1,4 +1,6 @@
-package com.bidguard;
+package bidguard;
+
+import com.bidguard.PdfAnnotator;
 
 import java.io.File;
 

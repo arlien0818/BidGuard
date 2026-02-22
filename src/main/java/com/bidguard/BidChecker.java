@@ -102,7 +102,8 @@ public class BidChecker {
 
 
     // 功能: 生成文本的 n-gram 集合（对中文使用字符 n-gram，对有空格语言使用 token n-gram）
-    private static Set<String> shingles(String text, int n) {
+    // 包访问权限，供 OcrDuplicateDetector 使用
+    static Set<String> shingles(String text, int n) {
         Set<String> set = new HashSet<>();
         String t = normalizeForSimilarity(text);
         if (t.isEmpty()) {

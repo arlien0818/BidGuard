@@ -1,5 +1,6 @@
 package bidguard;
 
+import com.bidguard.RecognizeCharacter;
 import com.aliyun.ocr_api20210707.models.*;
 import com.aliyun.teautil.models.RuntimeOptions;
 import com.google.gson.Gson;

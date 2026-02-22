@@ -1,6 +1,8 @@
 package bidguard;
 
 import java.io.File;
+import com.bidguard.OcrServiceClient;
+import com.bidguard.OcrServiceFactory;
 
 /**
  * 快速测试：验证新的阿里云OCR解析逻辑

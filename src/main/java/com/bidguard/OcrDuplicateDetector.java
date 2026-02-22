@@ -29,6 +29,16 @@ public class OcrDuplicateDetector {
         public int totalMatches;              // 总共找到的重复片段数
         public List<DuplicateMatch> matches;  // 重复片段列表
         
+        // 统计信息
+        public int doc1Length;                // 文档1长度（字符数）
+        public int doc2Length;                // 文档2长度（字符数）
+        public int minLengthParam;            // 最小片段长度参数
+        public int longestMatchLength;        // 最长连续匹配长度
+        public int jaccardIntersection;       // Jaccard交集大小
+        public int jaccardUnion;              // Jaccard并集大小
+        public double jaccardScore;           // Jaccard相似度分数 (0-100)
+        public double enhancedSimilarityScore; // 增强相似度分数 (0-100)
+        
         public DuplicateDetectionResult() {
             this.matches = new ArrayList<>();
             this.detectionTime = new java.util.Date().toString();
@@ -157,6 +167,33 @@ public class OcrDuplicateDetector {
         }
         
         result.totalMatches = result.matches.size();
+        
+        // 3. 计算统计信息
+        result.doc1Length = ocrResult1.fullText.length();
+        result.doc2Length = ocrResult2.fullText.length();
+        result.minLengthParam = minLength;
+        
+        // 计算最长匹配长度
+        result.longestMatchLength = 0;
+        for (DuplicateMatch match : result.matches) {
+            if (match.textLength > result.longestMatchLength) {
+                result.longestMatchLength = match.textLength;
+            }
+        }
+        
+        // 计算Jaccard相似度（使用3-gram）
+        JaccardStats jaccard = calculateJaccardStats(ocrResult1.fullText, ocrResult2.fullText, 3);
+        result.jaccardIntersection = jaccard.intersection;
+        result.jaccardUnion = jaccard.union;
+        result.jaccardScore = jaccard.score;
+        
+        // 计算增强相似度
+        result.enhancedSimilarityScore = BidChecker.enhancedSimilarity(
+            ocrResult1.fullText, ocrResult2.fullText);
+        
+        LOGGER.info(String.format("统计信息: 最长匹配=%d, Jaccard=%.2f, Enhanced=%.2f",
+            result.longestMatchLength, result.jaccardScore, result.enhancedSimilarityScore));
+        
         return result;
     }
     
@@ -460,22 +497,36 @@ public class OcrDuplicateDetector {
             writer.println("OCR文档查重检测报告");
             writer.println("=".repeat(80));
             writer.println();
-            writer.println("文档1: " + result.file1Name);
-            writer.println("文档2: " + result.file2Name);
+            writer.println("文档A: " + result.file1Name);
+            writer.println("文档B: " + result.file2Name);
             writer.println("检测时间: " + result.detectionTime);
-            writer.println("重复片段总数: " + result.totalMatches);
+            writer.println();
+            writer.println("-".repeat(80));
+            writer.println("【基本信息】");
+            writer.println("-".repeat(80));
+            writer.println(String.format("文档A长度: %d 字符", result.doc1Length));
+            writer.println(String.format("文档B长度: %d 字符", result.doc2Length));
+            writer.println(String.format("minLength值: %d", result.minLengthParam));
+            writer.println();
+            writer.println("-".repeat(80));
+            writer.println("【连续子串匹配结果】");
+            writer.println("-".repeat(80));
+            writer.println(String.format("匹配段总数: %d", result.totalMatches));
+            writer.println(String.format("最长连续匹配: %d 字符", result.longestMatchLength));
             writer.println();
             writer.println("=".repeat(80));
             writer.println();
             
             for (DuplicateMatch match : result.matches) {
-                writer.println(String.format("【重复片段 #%d】", match.matchId));
+                writer.println(String.format("【匹配段 #%d】", match.matchId));
                 writer.println("-".repeat(80));
-                writer.println("文本长度: " + match.textLength + " 字符");
+                writer.println(String.format("匹配长度: %d 字符", match.textLength));
+                writer.println(String.format("文档A起始位置: %d", match.doc1Location.startCharPos));
+                writer.println(String.format("文档B起始位置: %d", match.doc2Location.startCharPos));
                 writer.println();
                 
-                // 文档1位置
-                writer.println(">> 文档1位置信息:");
+                // 文档1详细位置
+                writer.println(">> 文档A位置信息:");
                 writer.println(String.format("   fullText字符范围: [%d - %d]",
                     match.doc1Location.startCharPos,
                     match.doc1Location.endCharPos));
@@ -497,8 +548,8 @@ public class OcrDuplicateDetector {
                 }
                 writer.println();
                 
-                // 文档2位置
-                writer.println(">> 文档2位置信息:");
+                // 文档2详细位置
+                writer.println(">> 文档B位置信息:");
                 writer.println(String.format("   fullText字符范围: [%d - %d]",
                     match.doc2Location.startCharPos,
                     match.doc2Location.endCharPos));
@@ -530,6 +581,18 @@ public class OcrDuplicateDetector {
             }
             
             writer.println("=".repeat(80));
+            writer.println("【统计汇总】");
+            writer.println("=".repeat(80));
+            writer.println();
+            writer.println("Jaccard相似度 (3-gram):");
+            writer.println(String.format("  交集大小: %d", result.jaccardIntersection));
+            writer.println(String.format("  并集大小: %d", result.jaccardUnion));
+            writer.println(String.format("  Jaccard分数: %.2f%%", result.jaccardScore));
+            writer.println();
+            writer.println("增强相似度:");
+            writer.println(String.format("  Enhanced Similarity: %.2f%%", result.enhancedSimilarityScore));
+            writer.println();
+            writer.println("=".repeat(80));
             writer.println("报告结束");
             writer.println("=".repeat(80));
             
@@ -538,6 +601,39 @@ public class OcrDuplicateDetector {
         } catch (IOException e) {
             LOGGER.warning("保存可读报告失败: " + e.getMessage());
         }
+    }
+    
+    /**
+     * Jaccard统计信息
+     */
+    private static class JaccardStats {
+        int intersection;
+        int union;
+        double score;
+        
+        JaccardStats(int intersection, int union, double score) {
+            this.intersection = intersection;
+            this.union = union;
+            this.score = score;
+        }
+    }
+    
+    /**
+     * 计算Jaccard统计信息（返回交集、并集和分数）
+     */
+    private static JaccardStats calculateJaccardStats(String text1, String text2, int n) {
+        Set<String> s1 = BidChecker.shingles(text1, n);
+        Set<String> s2 = BidChecker.shingles(text2, n);
+        
+        Set<String> union = new HashSet<>(s1);
+        union.addAll(s2);
+        
+        Set<String> intersection = new HashSet<>(s1);
+        intersection.retainAll(s2);
+        
+        double score = union.isEmpty() ? 0.0 : (intersection.size() * 100.0 / union.size());
+        
+        return new JaccardStats(intersection.size(), union.size(), score);
     }
     
     /**
