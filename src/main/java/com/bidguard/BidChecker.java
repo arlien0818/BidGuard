@@ -20,6 +20,8 @@ public class BidChecker {
 
     // ...existing code...
 
+    // 功能: 生成用于日志/UI的短文本预览（最多保留配置中的 previewMaxChars 个字符），
+    //       同时清理多余空白和不可见字符以便展示。
     private static String preview200(String s) {
         final int maxChars = SimilarityConfig.getInstance().previewMaxChars;
         if (s == null) {
@@ -34,6 +36,7 @@ public class BidChecker {
         return normalized.length() <= maxChars ? normalized : normalized.substring(0, maxChars) + "...";
     }
 
+    // 功能: 以调试友好的格式打印 PDF 提取或 OCR 的文本摘要（包含行数/字符数及前几行预览）
     private static void debugPrintPdfContent(File file, String text) {
         System.out.println("=== PDF文本调试输出: " + file.getName() + " ===");
         if (text == null || text.isBlank()) {
@@ -53,6 +56,7 @@ public class BidChecker {
         System.out.println("==============================\n");
     }
 
+    // 功能: 判断 Office/文本文件是否不可读或为空（包括 Office 临时锁文件），并在日志中记录原因
     private static boolean isUnreadableOrEmptyOfficeFile(File file) {
         if (file == null) {
             return true;
@@ -73,6 +77,7 @@ public class BidChecker {
         return false;
     }
 
+    // 功能: 对文本进行归一化处理以便相似度计算：小写、替换不可见空白并压缩多个空格
     private static String normalizeForSimilarity(String s) {
         if (s == null) {
             return "";
@@ -96,6 +101,7 @@ public class BidChecker {
     );
 
 
+    // 功能: 生成文本的 n-gram 集合（对中文使用字符 n-gram，对有空格语言使用 token n-gram）
     private static Set<String> shingles(String text, int n) {
         Set<String> set = new HashSet<>();
         String t = normalizeForSimilarity(text);
@@ -162,8 +168,9 @@ public class BidChecker {
         return intersection.size() * 100.0 / union.size();
     }
 
+    // 功能: 计算两个集合的交集大小（null/空集安全）
     private static int intersectionSize(Set<String> a, Set<String> b) {
-        if (a.isEmpty() || b.isEmpty()) {
+        if (a == null || b == null || a.isEmpty() || b.isEmpty()) {
             return 0;
         }
         Set<String> tmp = new HashSet<>(a);
@@ -556,6 +563,12 @@ public class BidChecker {
         }
     }
 
+    // 功能: 对比两个文档并返回权重化的相似度结果。
+    // 描述: 计算并返回包含词汇相似度、语义相似度、结构相似度的综合评分，
+    //       根据配置权重合成总体相似度，给出相似度等级和简要分析说明。
+    // 输入: text1, text2 - 原始文档文本（未经特殊预处理）。
+    // 输出: DocumentSimilarityResult 包含 overallSimilarity, lexicalSimilarity,
+    //       semanticSimilarity, structuralSimilarity, level, analysis 字段。
     public static DocumentSimilarityResult analyzeDocumentSimilarity(String text1, String text2) {
         if (text1 == null || text2 == null || text1.trim().isEmpty() || text2.trim().isEmpty()) {
             return new DocumentSimilarityResult(0.0, 0.0, 0.0, 0.0, "无法比较", "文档为空或无效");
@@ -717,6 +730,7 @@ public class BidChecker {
         return text.toString();
     }
 
+    // 功能: 估算用于相似度计算的“词/标记”数量：中文按字符计，有空格语言按空格拆分计数
     private static int approxTokenCountForSimilarity(String s) {
         String t = normalizeForSimilarity(s);
         if (t.isEmpty()) {
@@ -764,7 +778,7 @@ public class BidChecker {
     }
 
     /**
-     * 在两个段落内查找连续100字以上的相同子串
+     * 在两个段落内查找连续N字以上的相同子串
      * @param text1 段落1文本
      * @param text2 段落2文本
      * @param minLength 最小匹配长度（默认100）
@@ -920,7 +934,7 @@ public class BidChecker {
     }
     
     /**
-     * 在整个文档中查找跨段落的连续100字以上相同片段
+     * 在整个文档中查找跨段落的连续N字以上相同片段
      * 用于发现即使段落不完全匹配，但有长片段重复的情况
      */
     public static List<SubstringMatch> findCrossDocumentSubstrings(String text1, String text2, int minLength) {

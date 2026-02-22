@@ -101,11 +101,21 @@ public class OcrServiceFactory {
         
         String json = gson.toJson(result);
         
+        // 如果文件已存在且为只读，先设置为可写
+        if (cacheFile.exists() && !cacheFile.canWrite()) {
+            cacheFile.setWritable(true);
+        }
+        
         try (PrintWriter writer = new PrintWriter(
                 new OutputStreamWriter(
                     new FileOutputStream(cacheFile), 
                     java.nio.charset.StandardCharsets.UTF_8))) {
             writer.print(json);
+        }
+        
+        // 设置缓存文件为只读，防止误删
+        if (cacheFile.exists() && cacheFile.setReadOnly()) {
+            LOGGER.fine("缓存文件已设置为只读：" + cacheFile.getName());
         }
     }
     
