@@ -653,6 +653,238 @@ public class OcrDuplicateDetector {
     }
     
     /**
+     * 纯文本查重检测（用于TXT文件）
+     * 使用和PDF相同的查重算法，但不包含页码、bbox等OCR特有信息
+     * 
+     * @param text1 文本1内容
+     * @param text2 文本2内容
+     * @param file1Name 文件1名称
+     * @param file2Name 文件2名称
+     * @param minLength 最小重复片段长度（字符数）
+     * @return 查重结果（简化版，无bbox信息）
+     */
+    public static DuplicateDetectionResult detectDuplicatesFromText(
+            String text1,
+            String text2,
+            String file1Name,
+            String file2Name,
+            int minLength) {
+        
+        DuplicateDetectionResult result = new DuplicateDetectionResult();
+        result.file1Name = file1Name;
+        result.file2Name = file2Name;
+        result.doc1Length = text1.length();
+        result.doc2Length = text2.length();
+        result.minLengthParam = minLength;
+        
+        LOGGER.info("开始纯文本查重检测:");
+        LOGGER.info(String.format("  文档1: %s (%d字符)", file1Name, text1.length()));
+        LOGGER.info(String.format("  文档2: %s (%d字符)", file2Name, text2.length()));
+        LOGGER.info(String.format("  最小片段长度: %d字符", minLength));
+        
+        // 使用和PDF相同的核心查重算法
+        List<BidChecker.SubstringMatch> substringMatches = 
+            BidChecker.findCrossDocumentSubstrings(text1, text2, minLength);
+        
+        result.totalMatches = substringMatches.size();
+        LOGGER.info(String.format("找到 %d 个重复片段", substringMatches.size()));
+        
+        // 转换为DuplicateMatch对象（但不包含textBlocks信息）
+        int maxLength = 0;
+        for (int i = 0; i < substringMatches.size(); i++) {
+            BidChecker.SubstringMatch sm = substringMatches.get(i);
+            
+            DuplicateMatch match = new DuplicateMatch(i + 1, sm.substring);
+            
+            // 只设置字符位置，不设置textBlocks
+            match.doc1Location = new DocumentLocation();
+            match.doc1Location.startCharPos = sm.startPos1;
+            match.doc1Location.endCharPos = sm.startPos1 + sm.length;
+            
+            match.doc2Location = new DocumentLocation();
+            match.doc2Location.startCharPos = sm.startPos2;
+            match.doc2Location.endCharPos = sm.startPos2 + sm.length;
+            
+            result.matches.add(match);
+            
+            if (sm.length > maxLength) {
+                maxLength = sm.length;
+            }
+        }
+        
+        result.longestMatchLength = maxLength;
+        
+        // 计算Jaccard相似度
+        JaccardStats jaccardStats = calculateJaccardStats(text1, text2, 3);
+        result.jaccardIntersection = jaccardStats.intersection;
+        result.jaccardUnion = jaccardStats.union;
+        result.jaccardScore = jaccardStats.score;
+        
+        // 计算增强相似度
+        result.enhancedSimilarityScore = BidChecker.enhancedSimilarity(text1, text2);
+        
+        LOGGER.info(String.format("查重完成: Jaccard=%.2f%%, Enhanced=%.2f%%",
+            result.jaccardScore, result.enhancedSimilarityScore));
+        
+        return result;
+    }
+    
+    /**
+     * 保存纯文本查重结果（用于TXT文件）
+     * 生成简化版的JSON和TXT报告，不包含bbox、页码等信息
+     * 
+     * @param result 查重结果
+     * @param file1Name 文件1名称
+     * @param file2Name 文件2名称
+     * @return JSON文件
+     */
+    public static File saveTextDuplicateResult(
+            DuplicateDetectionResult result,
+            String file1Name,
+            String file2Name) throws IOException {
+        
+        // 创建output目录
+        File outputDir = new File("output");
+        if (!outputDir.exists()) {
+            outputDir.mkdirs();
+        }
+        
+        // 生成文件名
+        String baseName1 = file1Name.replaceAll("(?i)\\.(pdf|txt)$", "");
+        String baseName2 = file2Name.replaceAll("(?i)\\.(pdf|txt)$", "");
+        String timestamp = String.valueOf(System.currentTimeMillis());
+        
+        String jsonFileName = String.format("duplicate_detection_%s_vs_%s_%s.json",
+            sanitizeFileName(baseName1),
+            sanitizeFileName(baseName2),
+            timestamp);
+        
+        File jsonFile = new File(outputDir, jsonFileName);
+        
+        // 序列化为JSON
+        Gson gson = new GsonBuilder()
+            .setPrettyPrinting()
+            .disableHtmlEscaping()
+            .create();
+        
+        String json = gson.toJson(result);
+        
+        // 写入文件
+        try (Writer writer = new OutputStreamWriter(
+                new FileOutputStream(jsonFile),
+                StandardCharsets.UTF_8)) {
+            writer.write(json);
+        }
+        
+        LOGGER.info("查重结果已保存到: " + jsonFile.getAbsolutePath());
+        
+        // 保存简化版的文本报告
+        saveSimplifiedTextReport(result, outputDir, baseName1, baseName2, timestamp);
+        
+        return jsonFile;
+    }
+    
+    /**
+     * 保存简化版的文本报告（不包含bbox、页码等OCR特有信息）
+     */
+    private static void saveSimplifiedTextReport(
+            DuplicateDetectionResult result,
+            File outputDir,
+            String baseName1,
+            String baseName2,
+            String timestamp) {
+        
+        String txtFileName = String.format("duplicate_report_%s_vs_%s_%s.txt",
+            sanitizeFileName(baseName1),
+            sanitizeFileName(baseName2),
+            timestamp);
+        
+        File txtFile = new File(outputDir, txtFileName);
+        
+        try (PrintWriter writer = new PrintWriter(
+                new OutputStreamWriter(
+                    new FileOutputStream(txtFile),
+                    StandardCharsets.UTF_8))) {
+            
+            writer.println("=".repeat(80));
+            writer.println("文本查重检测报告");
+            writer.println("=".repeat(80));
+            writer.println();
+            writer.println("文档A: " + result.file1Name);
+            writer.println("文档B: " + result.file2Name);
+            writer.println("检测时间: " + result.detectionTime);
+            writer.println();
+            writer.println("-".repeat(80));
+            writer.println("【基本信息】");
+            writer.println("-".repeat(80));
+            writer.println(String.format("文档A长度: %d 字符", result.doc1Length));
+            writer.println(String.format("文档B长度: %d 字符", result.doc2Length));
+            writer.println(String.format("minLength值: %d", result.minLengthParam));
+            writer.println();
+            writer.println("-".repeat(80));
+            writer.println("【连续子串匹配结果】");
+            writer.println("-".repeat(80));
+            writer.println(String.format("匹配段总数: %d", result.totalMatches));
+            writer.println(String.format("最长连续匹配: %d 字符", result.longestMatchLength));
+            writer.println();
+            writer.println("=".repeat(80));
+            writer.println();
+            
+            for (DuplicateMatch match : result.matches) {
+                writer.println(String.format("【匹配段 #%d】", match.matchId));
+                writer.println("-".repeat(80));
+                writer.println(String.format("匹配长度: %d 字符", match.textLength));
+                writer.println(String.format("文档A起始位置: %d", match.doc1Location.startCharPos));
+                writer.println(String.format("文档B起始位置: %d", match.doc2Location.startCharPos));
+                writer.println();
+                
+                // 文档A位置信息（简化版，只有字符范围）
+                writer.println(">> 文档A位置信息:");
+                writer.println(String.format("   字符范围: [%d - %d]",
+                    match.doc1Location.startCharPos,
+                    match.doc1Location.endCharPos));
+                writer.println();
+                
+                // 文档B位置信息（简化版，只有字符范围）
+                writer.println(">> 文档B位置信息:");
+                writer.println(String.format("   字符范围: [%d - %d]",
+                    match.doc2Location.startCharPos,
+                    match.doc2Location.endCharPos));
+                writer.println();
+                
+                // 重复文本内容
+                writer.println(">> 重复文本内容:");
+                writer.println("-".repeat(80));
+                writer.println(match.duplicateText);
+                writer.println("-".repeat(80));
+                writer.println();
+                writer.println();
+            }
+            
+            writer.println("=".repeat(80));
+            writer.println("【统计汇总】");
+            writer.println("=".repeat(80));
+            writer.println();
+            writer.println("Jaccard相似度 (3-gram):");
+            writer.println(String.format("  交集大小: %d", result.jaccardIntersection));
+            writer.println(String.format("  并集大小: %d", result.jaccardUnion));
+            writer.println(String.format("  Jaccard分数: %.2f%%", result.jaccardScore));
+            writer.println();
+            writer.println("增强相似度:");
+            writer.println(String.format("  Enhanced Similarity: %.2f%%", result.enhancedSimilarityScore));
+            writer.println();
+            writer.println("=".repeat(80));
+            writer.println("报告结束");
+            writer.println("=".repeat(80));
+            
+            LOGGER.info("文本查重报告已保存到: " + txtFile.getAbsolutePath());
+            
+        } catch (IOException e) {
+            LOGGER.warning("保存文本报告失败: " + e.getMessage());
+        }
+    }
+    
+    /**
      * 测试方法：对比两个PDF文件
      */
     public static void main(String[] args) {

@@ -103,9 +103,10 @@ public class BidCheckerGUI extends JFrame {
         compareButton.setEnabled(false);
         compareButton.addActionListener(e -> compareFiles());
         
-        generateAnnotationDataButton = new JButton("生成查重标注数据");
+        generateAnnotationDataButton = new JButton("生成查重报告");
         generateAnnotationDataButton.setEnabled(false);
-        generateAnnotationDataButton.addActionListener(e -> generateDuplicateAnnotationData());
+        generateAnnotationDataButton.setToolTipText("TXT/PDF均可：生成详细的查重检测报告（JSON+TXT格式）");
+        generateAnnotationDataButton.addActionListener(e -> generateDuplicateReport());
         
         testPairGeneratorButton = new JButton("测试配对生成器");
         testPairGeneratorButton.setToolTipText("测试从多个文件生成所有可能的配对组合");
@@ -153,11 +154,11 @@ public class BidCheckerGUI extends JFrame {
         JPanel bottomPanel = new JPanel(new BorderLayout(5, 5));
         
         // 标注按钮
-        annotatePdfButton = new JButton("一键标注PDF");
+        annotatePdfButton = new JButton("生成PDF标注");
         annotatePdfButton.setEnabled(false);
         annotatePdfButton.addActionListener(e -> annotatePdfs());
         annotatePdfButton.setPreferredSize(new Dimension(150, 30));
-        annotatePdfButton.setToolTipText("先生成查重标注数据，检查无误后再执行标注");
+        annotatePdfButton.setToolTipText("仅PDF：根据查重报告在PDF上标注重复位置（需先生成查重报告）");
         
         JPanel annotatePanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
         annotatePanel.add(annotatePdfButton);
@@ -245,10 +246,11 @@ public class BidCheckerGUI extends JFrame {
         // 提示用户
         if (txtRadio.isSelected()) {
             annotationLogArea.append("已切换到 TXT 模式，请选择文本文件。\n");
-            annotationLogArea.append("注意：TXT 模式不支持查重标注功能，仅支持文本对比。\n");
+            annotationLogArea.append("TXT 模式支持：文本对比、查重报告生成。\n");
+            annotationLogArea.append("不支持：PDF标注功能（无位置信息）。\n");
         } else {
             annotationLogArea.append("已切换到 PDF 模式，请选择 PDF 文件。\n");
-            annotationLogArea.append("PDF 模式支持全部功能：文本对比、查重标注、批量处理。\n");
+            annotationLogArea.append("PDF 模式支持全部功能：文本对比、查重报告、PDF标注、批量处理。\n");
         }
     }
 
@@ -447,10 +449,9 @@ public class BidCheckerGUI extends JFrame {
                         }
                     }
                     
-                    // 更新按钮状态（TXT模式下禁用标注功能）
-                    boolean isTxtMode = txtRadio.isSelected();
+                    // 更新按钮状态
                     compareButton.setEnabled(true);
-                    generateAnnotationDataButton.setEnabled(!isTxtMode);  // TXT模式禁用
+                    generateAnnotationDataButton.setEnabled(true);  // TXT和PDF都支持查重报告
                     
                 } catch (Exception ex) {
                     LOGGER.log(Level.SEVERE, "读取文件失败", ex);
@@ -608,32 +609,27 @@ public class BidCheckerGUI extends JFrame {
 
 
 
-    // 功能: 生成查重标注数据（仅支持PDF文件）
-    private void generateDuplicateAnnotationData() {
+    // 功能: 生成查重报告（支持TXT和PDF文件）
+    private void generateDuplicateReport() {
         if (selectedFiles.size() != 2) {
             JOptionPane.showMessageDialog(this,
                 "请先选择两个文件！", "提示", JOptionPane.WARNING_MESSAGE);
             return;
         }
         
-        // 检查是否为TXT模式
-        if (txtRadio.isSelected()) {
-            JOptionPane.showMessageDialog(this,
-                "TXT模式不支持查重标注功能！\n\n"
-                + "TXT文件没有位置信息，无法生成标注数据。\n"
-                + "如需使用标注功能，请切换到PDF模式。",
-                "功能不支持", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-        
         File file1 = selectedFiles.get(0);
         File file2 = selectedFiles.get(1);
         
-        // 检查是否都是PDF文件
-        if (!file1.getName().toLowerCase().endsWith(".pdf") ||
-            !file2.getName().toLowerCase().endsWith(".pdf")) {
+        // 判断文件类型
+        boolean isTxtMode = txtRadio.isSelected();
+        String fileExt = isTxtMode ? ".txt" : ".pdf";
+        
+        // 检查文件扩展名是否匹配
+        if (!file1.getName().toLowerCase().endsWith(fileExt) ||
+            !file2.getName().toLowerCase().endsWith(fileExt)) {
             JOptionPane.showMessageDialog(this,
-                "查重标注数据生成功能仅支持PDF文件！", "提示", JOptionPane.WARNING_MESSAGE);
+                String.format("请选择两个%s文件！", fileExt.toUpperCase()),
+                "提示", JOptionPane.WARNING_MESSAGE);
             return;
         }
         
@@ -641,14 +637,122 @@ public class BidCheckerGUI extends JFrame {
         annotationLogArea.setText("");
         
         progressBar.setIndeterminate(true);
-        progressBar.setString("正在生成查重标注数据...");
+        progressBar.setString("正在生成查重报告...");
         generateAnnotationDataButton.setEnabled(false);
         
-        // 使用SwingWorker异步处理
+        if (isTxtMode) {
+            // TXT模式：生成简化版查重报告
+            generateTextDuplicateReport(file1, file2);
+        } else {
+            // PDF模式：生成完整版查重报告（含bbox信息）
+            generatePdfDuplicateReport(file1, file2);
+        }
+    }
+    
+    // 功能: 生成TXT文件的查重报告
+    private void generateTextDuplicateReport(File file1, File file2) {
         SwingWorker<File, String> worker = new SwingWorker<>() {
             @Override
             protected File doInBackground() throws Exception {
-                LOGGER.info("开始生成查重标注数据");
+                LOGGER.info("开始生成TXT查重报告");
+                publish("正在读取文本文件...\n");
+                
+                // 获取已读取的文本内容
+                String text1 = fileTexts.get(file1);
+                String text2 = fileTexts.get(file2);
+                
+                if (text1 == null || text2 == null) {
+                    throw new IOException("文本内容未读取，请先点击'读取所选文件'按钮");
+                }
+                
+                publish("文档1: " + text1.length() + " 字符\n");
+                publish("文档2: " + text2.length() + " 字符\n\n");
+                
+                publish("正在执行查重检测...\n");
+                
+                // 使用纯文本查重方法（和PDF使用相同的核心算法）
+                int minLength = SimilarityConfig.getInstance().substringMinLength;
+                OcrDuplicateDetector.DuplicateDetectionResult detection = 
+                    OcrDuplicateDetector.detectDuplicatesFromText(
+                        text1,
+                        text2,
+                        file1.getName(),
+                        file2.getName(),
+                        minLength
+                    );
+                
+                publish("找到 " + detection.totalMatches + " 个重复片段\n");
+                publish("Jaccard相似度: " + String.format("%.2f%%", detection.jaccardScore) + "\n");
+                publish("增强相似度: " + String.format("%.2f%%", detection.enhancedSimilarityScore) + "\n\n");
+                
+                publish("正在保存结果文件...\n");
+                
+                // 保存简化版的查重报告
+                File jsonFile = OcrDuplicateDetector.saveTextDuplicateResult(
+                    detection,
+                    file1.getName(),
+                    file2.getName()
+                );
+                
+                publish("查重报告已保存！\n");
+                
+                return jsonFile;
+            }
+            
+            @Override
+            protected void process(java.util.List<String> chunks) {
+                for (String message : chunks) {
+                    annotationLogArea.append(message);
+                }
+                annotationLogArea.setCaretPosition(annotationLogArea.getDocument().getLength());
+            }
+            
+            @Override
+            protected void done() {
+                try {
+                    File jsonFile = get();
+                    
+                    annotationLogArea.append("\n" + "=".repeat(60) + "\n");
+                    annotationLogArea.append("✓ TXT查重报告生成成功！\n");
+                    annotationLogArea.append("=".repeat(60) + "\n\n");
+                    annotationLogArea.append("JSON文件: " + jsonFile.getName() + "\n");
+                    annotationLogArea.append("文本报告: " + jsonFile.getName().replace(".json", ".txt").replace("duplicate_detection_", "duplicate_report_") + "\n");
+                    annotationLogArea.append("保存位置: " + jsonFile.getParent() + "\n\n");
+                    annotationLogArea.append("注意：TXT文件查重完成，无法进行PDF标注。\n");
+                    
+                    LOGGER.info("TXT查重报告生成完成");
+                    
+                    JOptionPane.showMessageDialog(BidCheckerGUI.this,
+                        "TXT查重报告已生成！\n\n" +
+                        "文件保存在 output/ 目录下：\n" +
+                        "- " + jsonFile.getName() + " (JSON数据)\n" +
+                        "- " + jsonFile.getName().replace(".json", ".txt").replace("duplicate_detection_", "duplicate_report_") + " (可读报告)\n\n" +
+                        "请查看报告文件了解详细的查重结果。",
+                        "成功", JOptionPane.INFORMATION_MESSAGE);
+                        
+                } catch (Exception ex) {
+                    LOGGER.log(Level.SEVERE, "生成TXT查重报告失败", ex);
+                    annotationLogArea.append("\n✗ 生成失败: " + ex.getMessage() + "\n");
+                    JOptionPane.showMessageDialog(BidCheckerGUI.this,
+                        "生成查重报告失败:\n" + ex.getMessage(),
+                        "错误", JOptionPane.ERROR_MESSAGE);
+                } finally {
+                    generateAnnotationDataButton.setEnabled(true);
+                    progressBar.setIndeterminate(false);
+                    progressBar.setString("就绪");
+                }
+            }
+        };
+        
+        worker.execute();
+    }
+    
+    // 功能: 生成PDF文件的查重报告
+    private void generatePdfDuplicateReport(File file1, File file2) {
+        SwingWorker<File, String> worker = new SwingWorker<>() {
+            @Override
+            protected File doInBackground() throws Exception {
+                LOGGER.info("开始生成PDF查重报告");
                 publish("正在获取OCR识别结果...\n");
                 
                 // 获取两个PDF的OCR结果
@@ -660,7 +764,7 @@ public class BidCheckerGUI extends JFrame {
                 
                 publish("\n正在执行查重检测...\n");
                 
-                // 执行查重检测
+                // 执行查重检测（和TXT使用相同的核心算法）
                 int minLength = SimilarityConfig.getInstance().substringMinLength;
                 OcrDuplicateDetector.DuplicateDetectionResult detection = 
                     OcrDuplicateDetector.detectDuplicates(
@@ -672,17 +776,19 @@ public class BidCheckerGUI extends JFrame {
                     );
                 
                 publish("找到 " + detection.totalMatches + " 个重复片段\n");
+                publish("Jaccard相似度: " + String.format("%.2f%%", detection.jaccardScore) + "\n");
+                publish("增强相似度: " + String.format("%.2f%%", detection.enhancedSimilarityScore) + "\n\n");
                 
-                publish("\n正在保存结果文件...\n");
+                publish("正在保存结果文件...\n");
                 
-                // 保存结果到JSON文件
+                // 保存结果到JSON文件（含bbox信息）
                 File jsonFile = OcrDuplicateDetector.saveResultToJson(
                     detection,
                     file1.getName(),
                     file2.getName()
                 );
                 
-                publish("查重标注数据已保存！\n");
+                publish("查重报告已保存！\n");
                 
                 return jsonFile;
             }
@@ -704,31 +810,31 @@ public class BidCheckerGUI extends JFrame {
                     latestDetectionJsonFile = jsonFile;
                     
                     annotationLogArea.append("\n" + "=".repeat(60) + "\n");
-                    annotationLogArea.append("✓ 查重标注数据生成成功！\n");
+                    annotationLogArea.append("✓ PDF查重报告生成成功！\n");
                     annotationLogArea.append("=".repeat(60) + "\n\n");
                     annotationLogArea.append("JSON文件: " + jsonFile.getName() + "\n");
                     annotationLogArea.append("文本报告: " + jsonFile.getName().replace(".json", ".txt").replace("duplicate_detection_", "duplicate_report_") + "\n");
                     annotationLogArea.append("保存位置: " + jsonFile.getParent() + "\n\n");
-                    annotationLogArea.append("请检查上述文件，确认无误后，点击'执行PDF标注'按钮。\n");
+                    annotationLogArea.append("下一步：如需在PDF上标注，请点击'生成PDF标注'按钮。\n");
                     
-                    LOGGER.info("查重标注数据生成完成");
+                    LOGGER.info("PDF查重报告生成完成");
                     
                     // 启用标注按钮
                     annotatePdfButton.setEnabled(true);
                     
                     JOptionPane.showMessageDialog(BidCheckerGUI.this,
-                        "查重标注数据已生成！\n\n" +
+                        "PDF查重报告已生成！\n\n" +
                         "文件保存在 output/ 目录下：\n" +
                         "- " + jsonFile.getName() + " (JSON数据)\n" +
                         "- " + jsonFile.getName().replace(".json", ".txt").replace("duplicate_detection_", "duplicate_report_") + " (可读报告)\n\n" +
-                        "请人工检查文件内容，确认无误后点击'执行PDF标注'按钮。",
+                        "如需在PDF上标注重复位置，请点击'生成PDF标注'按钮。",
                         "成功", JOptionPane.INFORMATION_MESSAGE);
                         
                 } catch (Exception ex) {
-                    LOGGER.log(Level.SEVERE, "生成查重标注数据失败", ex);
+                    LOGGER.log(Level.SEVERE, "生成PDF查重报告失败", ex);
                     annotationLogArea.append("\n✗ 生成失败: " + ex.getMessage() + "\n");
                     JOptionPane.showMessageDialog(BidCheckerGUI.this,
-                        "生成查重标注数据失败:\n" + ex.getMessage(),
+                        "生成查重报告失败:\n" + ex.getMessage(),
                         "错误", JOptionPane.ERROR_MESSAGE);
                 } finally {
                     generateAnnotationDataButton.setEnabled(true);
@@ -745,7 +851,7 @@ public class BidCheckerGUI extends JFrame {
     private void annotatePdfs() {
         if (latestDetectionJsonFile == null || !latestDetectionJsonFile.exists()) {
             JOptionPane.showMessageDialog(this,
-                "未找到查重检测结果！\n请先点击'生成查重标注数据'按钮。",
+                "未找到查重检测结果！\n请先点击'生成查重报告'按钮生成PDF查重报告。",
                 "提示", JOptionPane.WARNING_MESSAGE);
             return;
         }
