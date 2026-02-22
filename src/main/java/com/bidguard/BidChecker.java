@@ -78,7 +78,7 @@ public class BidChecker {
     }
 
     // 功能: 对文本进行归一化处理以便相似度计算：小写、替换不可见空白并压缩多个空格
-    private static String normalizeForSimilarity(String s) {
+    static String normalizeForSimilarity(String s) {
         if (s == null) {
             return "";
         }

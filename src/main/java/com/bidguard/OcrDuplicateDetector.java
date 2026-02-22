@@ -34,6 +34,9 @@ public class OcrDuplicateDetector {
         public int doc2Length;                // 文档2长度（字符数）
         public int minLengthParam;            // 最小片段长度参数
         public int longestMatchLength;        // 最长连续匹配长度
+        public int nGramSize;                 // nGram值（n的大小，如2或3）
+        public int nGramTheoryCountDoc1;      // 文档1理论nGram数量
+        public int nGramTheoryCountDoc2;      // 文档2理论nGram数量
         public int jaccardIntersection;       // Jaccard交集大小
         public int jaccardUnion;              // Jaccard并集大小
         public double jaccardScore;           // Jaccard相似度分数 (0-100)
@@ -186,6 +189,9 @@ public class OcrDuplicateDetector {
         result.jaccardIntersection = jaccard.intersection;
         result.jaccardUnion = jaccard.union;
         result.jaccardScore = jaccard.score;
+        result.nGramSize = jaccard.nGramSize;
+        result.nGramTheoryCountDoc1 = jaccard.theoryCountDoc1;
+        result.nGramTheoryCountDoc2 = jaccard.theoryCountDoc2;
         
         // 计算增强相似度
         result.enhancedSimilarityScore = BidChecker.enhancedSimilarity(
@@ -584,7 +590,10 @@ public class OcrDuplicateDetector {
             writer.println("【统计汇总】");
             writer.println("=".repeat(80));
             writer.println();
-            writer.println("Jaccard相似度 (3-gram):");
+            writer.println(String.format("Jaccard相似度 (%d-gram):", result.nGramSize));
+            writer.println(String.format("  nGram值: %d", result.nGramSize));
+            writer.println(String.format("  文档A理论nGram数量: %d", result.nGramTheoryCountDoc1));
+            writer.println(String.format("  文档B理论nGram数量: %d", result.nGramTheoryCountDoc2));
             writer.println(String.format("  交集大小: %d", result.jaccardIntersection));
             writer.println(String.format("  并集大小: %d", result.jaccardUnion));
             writer.println(String.format("  Jaccard分数: %.2f%%", result.jaccardScore));
@@ -610,16 +619,22 @@ public class OcrDuplicateDetector {
         int intersection;
         int union;
         double score;
+        int nGramSize;
+        int theoryCountDoc1;
+        int theoryCountDoc2;
         
-        JaccardStats(int intersection, int union, double score) {
+        JaccardStats(int intersection, int union, double score, int nGramSize, int theoryCountDoc1, int theoryCountDoc2) {
             this.intersection = intersection;
             this.union = union;
             this.score = score;
+            this.nGramSize = nGramSize;
+            this.theoryCountDoc1 = theoryCountDoc1;
+            this.theoryCountDoc2 = theoryCountDoc2;
         }
     }
     
     /**
-     * 计算Jaccard统计信息（返回交集、并集和分数）
+     * 计算Jaccard统计信息（返回交集、并集、分数及理论nGram数量）
      */
     private static JaccardStats calculateJaccardStats(String text1, String text2, int n) {
         Set<String> s1 = BidChecker.shingles(text1, n);
@@ -633,7 +648,13 @@ public class OcrDuplicateDetector {
         
         double score = union.isEmpty() ? 0.0 : (intersection.size() * 100.0 / union.size());
         
-        return new JaccardStats(intersection.size(), union.size(), score);
+        // 计算理论nGram数量（归一化后去除空格的字符数 - n + 1）
+        String norm1 = BidChecker.normalizeForSimilarity(text1).replace(" ", "");
+        String norm2 = BidChecker.normalizeForSimilarity(text2).replace(" ", "");
+        int theoryCount1 = Math.max(0, norm1.length() - n + 1);
+        int theoryCount2 = Math.max(0, norm2.length() - n + 1);
+        
+        return new JaccardStats(intersection.size(), union.size(), score, n, theoryCount1, theoryCount2);
     }
     
     /**
@@ -719,6 +740,9 @@ public class OcrDuplicateDetector {
         result.jaccardIntersection = jaccardStats.intersection;
         result.jaccardUnion = jaccardStats.union;
         result.jaccardScore = jaccardStats.score;
+        result.nGramSize = jaccardStats.nGramSize;
+        result.nGramTheoryCountDoc1 = jaccardStats.theoryCountDoc1;
+        result.nGramTheoryCountDoc2 = jaccardStats.theoryCountDoc2;
         
         // 计算增强相似度
         result.enhancedSimilarityScore = BidChecker.enhancedSimilarity(text1, text2);
@@ -865,7 +889,10 @@ public class OcrDuplicateDetector {
             writer.println("【统计汇总】");
             writer.println("=".repeat(80));
             writer.println();
-            writer.println("Jaccard相似度 (3-gram):");
+            writer.println(String.format("Jaccard相似度 (%d-gram):", result.nGramSize));
+            writer.println(String.format("  nGram值: %d", result.nGramSize));
+            writer.println(String.format("  文档A理论nGram数量: %d", result.nGramTheoryCountDoc1));
+            writer.println(String.format("  文档B理论nGram数量: %d", result.nGramTheoryCountDoc2));
             writer.println(String.format("  交集大小: %d", result.jaccardIntersection));
             writer.println(String.format("  并集大小: %d", result.jaccardUnion));
             writer.println(String.format("  Jaccard分数: %.2f%%", result.jaccardScore));
