@@ -1,4 +1,7 @@
-package com.bidguard;
+package com.bidguard.pdf;
+
+import com.bidguard.ocr.OcrServiceClient;
+import com.bidguard.ocr.OcrServiceFactory;
 
 import java.io.File;
 import java.util.Objects;

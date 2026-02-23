@@ -1,4 +1,4 @@
-package com.bidguard;
+package com.bidguard.pdf;
 
 import java.util.ArrayList;
 import java.util.List;

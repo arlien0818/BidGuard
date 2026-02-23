@@ -1,4 +1,6 @@
-package com.bidguard;
+package com.bidguard.ocr;
+
+import com.bidguard.config.SimilarityConfig;
 
 import com.aliyun.tea.*;
 import com.aliyun.ocr_api20210707.models.*;

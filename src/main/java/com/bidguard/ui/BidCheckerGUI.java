@@ -1,4 +1,13 @@
-package com.bidguard;
+package com.bidguard.ui;
+
+import com.bidguard.core.*;
+import com.bidguard.config.SimilarityConfig;
+import com.bidguard.ocr.OcrDuplicateDetector;
+import com.bidguard.ocr.OcrServiceClient;
+import com.bidguard.ocr.OcrServiceFactory;
+import com.bidguard.pdf.PdfAnnotator;
+import com.bidguard.pdf.PdfTask;
+import com.bidguard.pdf.PdfTextExtractor;
 
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;

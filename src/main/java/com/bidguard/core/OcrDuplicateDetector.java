@@ -1,4 +1,7 @@
-package com.bidguard;
+package com.bidguard.core;
+
+import com.bidguard.ocr.OcrServiceClient;
+import com.bidguard.ocr.OcrServiceFactory;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;

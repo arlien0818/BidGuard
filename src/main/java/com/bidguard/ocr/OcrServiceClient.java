@@ -1,4 +1,7 @@
-package com.bidguard;
+package com.bidguard.ocr;
+
+import com.bidguard.config.SimilarityConfig;
+import com.bidguard.pdf.PdfPageRenderer;
 
 import javax.imageio.ImageIO;
 import javax.imageio.ImageWriteParam;

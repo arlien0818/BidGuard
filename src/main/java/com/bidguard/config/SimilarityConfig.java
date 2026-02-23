@@ -1,4 +1,4 @@
-package com.bidguard;
+package com.bidguard.config;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;

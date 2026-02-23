@@ -1,4 +1,4 @@
-package com.bidguard;
+package com.bidguard.image;
 
 import javax.imageio.ImageIO;
 import java.awt.*;

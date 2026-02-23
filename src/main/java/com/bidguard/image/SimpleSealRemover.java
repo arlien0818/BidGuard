@@ -1,4 +1,4 @@
-package com.bidguard;
+package com.bidguard.image;
 
 import java.awt.*;
 import java.awt.image.BufferedImage;

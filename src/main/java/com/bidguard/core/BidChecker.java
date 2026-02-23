@@ -1,4 +1,9 @@
-package com.bidguard;
+package com.bidguard.core;
+
+import com.bidguard.config.SimilarityConfig;
+import com.bidguard.pdf.PdfTextExtractor;
+import com.bidguard.ocr.OcrServiceClient;
+import com.bidguard.ocr.OcrServiceFactory;
 
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;

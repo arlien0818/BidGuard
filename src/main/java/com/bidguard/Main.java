@@ -1,5 +1,6 @@
 package com.bidguard;
 
+import com.bidguard.ui.BidCheckerGUI;
 import javax.swing.SwingUtilities;
 
 public class Main {

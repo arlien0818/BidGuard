@@ -1,4 +1,7 @@
-package com.bidguard;
+package com.bidguard.pdf;
+
+import com.bidguard.config.SimilarityConfig;
+import com.bidguard.core.OcrDuplicateDetector;
 
 import com.google.gson.Gson;
 import org.apache.pdfbox.pdmodel.PDDocument;

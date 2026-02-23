@@ -1,4 +1,7 @@
-package com.bidguard;
+package com.bidguard.ocr;
+
+import com.bidguard.config.SimilarityConfig;
+import com.bidguard.image.SimpleSealRemover;
 
 import com.aliyun.ocr_api20210707.models.*;
 import com.aliyun.teautil.models.RuntimeOptions;
