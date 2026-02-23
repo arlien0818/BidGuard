@@ -173,6 +173,9 @@ public class OcrServiceFactory {
      * 使用阿里云 OCR 识别 PDF
      */
     private static OcrServiceClient.OcrResult recognizePdfWithAliyun(File pdfFile) throws IOException {
+        // 获取配置实例
+        SimilarityConfig config = SimilarityConfig.getInstance();
+        
         OcrServiceClient.OcrResult result = new OcrServiceClient.OcrResult();
         result.engine = "aliyun";
         

@@ -41,6 +41,15 @@ public class BidCheckerGUI extends JFrame {
 
     private JProgressBar progressBar;
     private JTabbedPane tabbedPane;
+    
+    // OCR识别选项卡组件
+    private JLabel ocrFileLabel;
+    private JButton selectOcrFileButton;
+    private JButton executeOcrButton;
+    private JButton saveOcrResultButton;
+    private JTextArea ocrResultArea;
+    private JTextArea ocrConfigArea;
+    private File selectedOcrFile;
 
     // 功能: 初始化主界面组件并设置默认文件
     public BidCheckerGUI() {
@@ -54,8 +63,9 @@ public class BidCheckerGUI extends JFrame {
 
         JPanel comparePanel = createComparePanel();
         tabbedPane.addTab("文件对比", comparePanel);
-
- 
+        
+        JPanel ocrPanel = createOcrPanel();
+        tabbedPane.addTab("OCR识别", ocrPanel);
 
         add(tabbedPane, BorderLayout.CENTER);
 
@@ -194,6 +204,94 @@ public class BidCheckerGUI extends JFrame {
 
         panel.add(mainSplitPane, BorderLayout.CENTER);
 
+        return panel;
+    }
+
+    // 功能: 创建OCR识别选项卡界面布局
+    private JPanel createOcrPanel() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        // === 顶部：文件选择和配置信息 ===
+        JPanel topPanel = new JPanel(new BorderLayout(5, 5));
+        
+        // 文件选择面板
+        JPanel filePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        filePanel.setBorder(BorderFactory.createTitledBorder("PDF文件选择"));
+        
+        ocrFileLabel = new JLabel("未选择文件");
+        ocrFileLabel.setPreferredSize(new Dimension(400, 25));
+        
+        selectOcrFileButton = new JButton("选择PDF文件");
+        selectOcrFileButton.addActionListener(e -> selectOcrFile());
+        
+        filePanel.add(selectOcrFileButton);
+        filePanel.add(ocrFileLabel);
+        
+        // 配置信息显示
+        ocrConfigArea = new JTextArea(6, 50);
+        ocrConfigArea.setEditable(false);
+        ocrConfigArea.setBackground(new Color(245, 245, 245));
+        JScrollPane configScroll = new JScrollPane(ocrConfigArea);
+        configScroll.setBorder(BorderFactory.createTitledBorder("当前OCR配置"));
+        
+        // 显示当前配置
+        updateOcrConfigDisplay();
+        
+        topPanel.add(filePanel, BorderLayout.NORTH);
+        topPanel.add(configScroll, BorderLayout.CENTER);
+        
+        // === 中间：操作按钮 ===
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
+        
+        executeOcrButton = new JButton("执行OCR识别");
+        executeOcrButton.setEnabled(false);
+        executeOcrButton.setPreferredSize(new Dimension(150, 35));
+        executeOcrButton.addActionListener(e -> executeOcr());
+        
+        saveOcrResultButton = new JButton("保存识别结果");
+        saveOcrResultButton.setEnabled(false);
+        saveOcrResultButton.setPreferredSize(new Dimension(150, 35));
+        saveOcrResultButton.addActionListener(e -> saveOcrResult());
+        
+        JButton reloadConfigButton = new JButton("重新加载配置");
+        reloadConfigButton.setPreferredSize(new Dimension(150, 35));
+        reloadConfigButton.addActionListener(e -> {
+            SimilarityConfig.reload();
+            updateOcrConfigDisplay();
+            ocrResultArea.append("\n========================================\n");
+            ocrResultArea.append("配置已重新加载\n");
+            ocrResultArea.append("========================================\n\n");
+        });
+        
+        buttonPanel.add(executeOcrButton);
+        buttonPanel.add(saveOcrResultButton);
+        buttonPanel.add(reloadConfigButton);
+        
+        // === 底部：识别结果显示 ===
+        ocrResultArea = new JTextArea();
+        ocrResultArea.setEditable(false);
+        ocrResultArea.setLineWrap(true);
+        ocrResultArea.setWrapStyleWord(true);
+        JScrollPane resultScroll = new JScrollPane(ocrResultArea);
+        resultScroll.setBorder(BorderFactory.createTitledBorder("OCR识别结果"));
+        
+        // 初始提示
+        ocrResultArea.setText("请选择一个PDF文件，然后执行OCR识别。\n\n" +
+                "功能说明：\n" +
+                "1. 选择PDF文件后，点击\"执行OCR识别\"开始识别\n" +
+                "2. 识别完成后会显示文字内容、字符数、识别块数等信息\n" +
+                "3. 可点击\"保存识别结果\"将结果保存到文件\n" +
+                "4. 修改config.properties后，可点击\"重新加载配置\"使新配置生效\n\n" +
+                "提示：\n" +
+                "- 可通过修改config.properties中的ocr.render.dpi调整识别精度（默认200）\n" +
+                "- 将ocr.remove.seal.enabled设为true可在识别前去除红章（实验性功能）\n");
+        
+        // 整体布局
+        panel.add(topPanel, BorderLayout.NORTH);
+        panel.add(buttonPanel, BorderLayout.CENTER);
+        panel.add(resultScroll, BorderLayout.SOUTH);
+        
         return panel;
     }
 
@@ -1297,6 +1395,191 @@ public class BidCheckerGUI extends JFrame {
             }
         }
         return text.toString();
+    }
+
+    // ========== OCR识别相关方法 ==========
+    
+    // 功能: 更新OCR配置显示
+    private void updateOcrConfigDisplay() {
+        SimilarityConfig config = SimilarityConfig.getInstance();
+        StringBuilder sb = new StringBuilder();
+        sb.append("OCR引擎类型: ").append(config.ocrType.toUpperCase()).append("\n");
+        sb.append("PDF渲染DPI: ").append(config.ocrRenderDpi).append(" (影响识别精度，推荐150-300)\n");
+        sb.append("去红章功能: ").append(config.ocrRemoveSealEnabled ? "开启" : "关闭").append("\n");
+        sb.append("图片压缩最大边长: ").append(config.ocrImageMaxDimension).append("px\n");
+        sb.append("JPEG压缩质量: ").append(String.format("%.2f", config.ocrJpegQuality)).append("\n");
+        
+        if ("aliyun".equalsIgnoreCase(config.ocrType)) {
+            sb.append("\n阿里云OCR配置:\n");
+            sb.append("  - API端点: ").append(config.ocrAliyunEndpoint).append("\n");
+            sb.append("  - AccessKey: ").append(config.ocrAliyunAccessKeyId.isEmpty() ? "未配置" : "已配置").append("\n");
+        } else {
+            sb.append("\n本地EasyOCR配置:\n");
+            sb.append("  - 服务地址: ").append(config.ocrLocalUrl).append("\n");
+        }
+        
+        ocrConfigArea.setText(sb.toString());
+    }
+    
+    // 功能: 选择OCR识别的PDF文件
+    private void selectOcrFile() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setCurrentDirectory(getTestFilesDirectory());
+        fileChooser.setFileFilter(new FileNameExtensionFilter("PDF文件", "pdf"));
+        fileChooser.setDialogTitle("选择要进行OCR识别的PDF文件");
+        
+        int result = fileChooser.showOpenDialog(this);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            selectedOcrFile = fileChooser.getSelectedFile();
+            ocrFileLabel.setText(selectedOcrFile.getName());
+            executeOcrButton.setEnabled(true);
+            
+            ocrResultArea.append("\n========================================\n");
+            ocrResultArea.append("已选择文件: " + selectedOcrFile.getName() + "\n");
+            ocrResultArea.append("文件大小: " + String.format("%.2f MB", selectedOcrFile.length() / (1024.0 * 1024.0)) + "\n");
+            ocrResultArea.append("========================================\n\n");
+        }
+    }
+    
+    // 功能: 执行OCR识别
+    private void executeOcr() {
+        if (selectedOcrFile == null || !selectedOcrFile.exists()) {
+            JOptionPane.showMessageDialog(this, "请先选择一个PDF文件", "提示", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        
+        executeOcrButton.setEnabled(false);
+        saveOcrResultButton.setEnabled(false);
+        progressBar.setString("正在执行OCR识别...");
+        progressBar.setIndeterminate(true);
+        
+        SwingWorker<OcrServiceClient.OcrResult, String> worker = new SwingWorker<>() {
+            @Override
+            protected OcrServiceClient.OcrResult doInBackground() throws Exception {
+                publish("开始OCR识别: " + selectedOcrFile.getName() + "\n");
+                publish("识别配置: DPI=" + SimilarityConfig.getInstance().ocrRenderDpi + 
+                       ", 去红章=" + (SimilarityConfig.getInstance().ocrRemoveSealEnabled ? "是" : "否") + "\n");
+                publish("请稍候，正在处理...\n\n");
+                
+                long startTime = System.currentTimeMillis();
+                OcrServiceClient.OcrResult result = OcrServiceFactory.recognizePdf(selectedOcrFile);
+                long elapsed = System.currentTimeMillis() - startTime;
+                
+                publish("\n识别完成！耗时: " + (elapsed / 1000.0) + " 秒\n");
+                
+                return result;
+            }
+            
+            @Override
+            protected void process(List<String> chunks) {
+                for (String msg : chunks) {
+                    ocrResultArea.append(msg);
+                }
+                ocrResultArea.setCaretPosition(ocrResultArea.getDocument().getLength());
+            }
+            
+            @Override
+            protected void done() {
+                try {
+                    OcrServiceClient.OcrResult result = get();
+                    
+                    // 计算平均置信度（在外层作用域定义）
+                    double avgConfidence = result.texts.stream()
+                        .mapToDouble(t -> t.confidence)
+                        .average()
+                        .orElse(0.0);
+                    
+                    ocrResultArea.append("\n" + "=".repeat(60) + "\n");
+                    ocrResultArea.append("识别结果统计\n");
+                    ocrResultArea.append("=".repeat(60) + "\n");
+                    ocrResultArea.append("识别引擎: " + result.engine + "\n");
+                    ocrResultArea.append("识别状态: " + (result.success ? "成功" : "失败") + "\n");
+                    ocrResultArea.append("总页数: " + result.pageCount + "\n");
+                    ocrResultArea.append("文字块数量: " + result.texts.size() + "\n");
+                    ocrResultArea.append("总字符数: " + result.fullText.length() + "\n");
+                    
+                    if (!result.success) {
+                        ocrResultArea.append("错误信息: " + result.error + "\n");
+                    } else {
+                        ocrResultArea.append("平均置信度: " + String.format("%.2f%%", avgConfidence * 100) + "\n");
+                    }
+                    ocrResultArea.append("=".repeat(60) + "\n\n");
+                    
+                    if (result.success && result.hasText()) {
+                        ocrResultArea.append("识别文本内容（前500字符预览）:\n");
+                        ocrResultArea.append("-".repeat(60) + "\n");
+                        String preview = result.fullText.length() > 500 ? 
+                            result.fullText.substring(0, 500) + "..." : result.fullText;
+                        ocrResultArea.append(preview + "\n");
+                        ocrResultArea.append("-".repeat(60) + "\n\n");
+                        
+                        saveOcrResultButton.setEnabled(true);
+                        
+                        JOptionPane.showMessageDialog(BidCheckerGUI.this,
+                            String.format("OCR识别成功！\n\n总字符数: %d\n文字块数: %d\n平均置信度: %.2f%%",
+                                result.fullText.length(), result.texts.size(), avgConfidence * 100),
+                            "识别完成", JOptionPane.INFORMATION_MESSAGE);
+                    } else {
+                        JOptionPane.showMessageDialog(BidCheckerGUI.this,
+                            "OCR识别失败: " + result.error,
+                            "错误", JOptionPane.ERROR_MESSAGE);
+                    }
+                    
+                } catch (Exception ex) {
+                    LOGGER.log(Level.SEVERE, "OCR识别异常", ex);
+                    ocrResultArea.append("\n[错误] OCR识别异常: " + ex.getMessage() + "\n");
+                    JOptionPane.showMessageDialog(BidCheckerGUI.this,
+                        "OCR识别异常: " + ex.getMessage(),
+                        "错误", JOptionPane.ERROR_MESSAGE);
+                } finally {
+                    executeOcrButton.setEnabled(true);
+                    progressBar.setString("就绪");
+                    progressBar.setIndeterminate(false);
+                }
+            }
+        };
+        
+        worker.execute();
+    }
+    
+    // 功能: 保存OCR识别结果
+    private void saveOcrResult() {
+        if (selectedOcrFile == null) {
+            return;
+        }
+        
+        try {
+            // 查找缓存的OCR结果文件
+            File outputDir = new File("output");
+            String baseName = selectedOcrFile.getName().replaceAll("(?i)\\.pdf$", "");
+            File cacheFile = new File(outputDir, baseName + "_ocr_cache.json");
+            
+            if (cacheFile.exists()) {
+                // 打开文件所在目录
+                if (Desktop.isDesktopSupported()) {
+                    Desktop desktop = Desktop.getDesktop();
+                    if (desktop.isSupported(Desktop.Action.OPEN)) {
+                        desktop.open(outputDir);
+                    }
+                }
+                
+                JOptionPane.showMessageDialog(this,
+                    "OCR识别结果已缓存到:\n" + cacheFile.getAbsolutePath() + "\n\n已打开output目录",
+                    "保存成功", JOptionPane.INFORMATION_MESSAGE);
+                
+                ocrResultArea.append("\n[提示] 识别结果已保存到: " + cacheFile.getName() + "\n");
+            } else {
+                JOptionPane.showMessageDialog(this,
+                    "未找到OCR缓存文件，请先执行OCR识别",
+                    "提示", JOptionPane.WARNING_MESSAGE);
+            }
+            
+        } catch (Exception ex) {
+            LOGGER.log(Level.WARNING, "打开输出目录失败", ex);
+            JOptionPane.showMessageDialog(this,
+                "无法打开输出目录: " + ex.getMessage(),
+                "警告", JOptionPane.WARNING_MESSAGE);
+        }
     }
 
     // 功能: 启动 Swing 应用入口
