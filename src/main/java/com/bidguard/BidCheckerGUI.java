@@ -55,7 +55,7 @@ public class BidCheckerGUI extends JFrame {
     public BidCheckerGUI() {
         setTitle("BidGuard 智能文档处理工具");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(800, 600);
+        setSize(1000, 750);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
 
@@ -275,6 +275,7 @@ public class BidCheckerGUI extends JFrame {
         ocrResultArea.setWrapStyleWord(true);
         JScrollPane resultScroll = new JScrollPane(ocrResultArea);
         resultScroll.setBorder(BorderFactory.createTitledBorder("OCR识别结果"));
+        resultScroll.setPreferredSize(new Dimension(0, 250)); // 设置首选高度，防止挤压按钮区域
         
         // 初始提示
         ocrResultArea.setText("请选择一个PDF文件，然后执行OCR识别。\n\n" +
@@ -287,10 +288,14 @@ public class BidCheckerGUI extends JFrame {
                 "- 可通过修改config.properties中的ocr.render.dpi调整识别精度（默认200）\n" +
                 "- 将ocr.remove.seal.enabled设为true可在识别前去除红章（实验性功能）\n");
         
+        // 组合按钮和结果区到中间面板
+        JPanel centerPanel = new JPanel(new BorderLayout(5, 5));
+        centerPanel.add(buttonPanel, BorderLayout.NORTH);
+        centerPanel.add(resultScroll, BorderLayout.CENTER);
+        
         // 整体布局
         panel.add(topPanel, BorderLayout.NORTH);
-        panel.add(buttonPanel, BorderLayout.CENTER);
-        panel.add(resultScroll, BorderLayout.SOUTH);
+        panel.add(centerPanel, BorderLayout.CENTER);
         
         return panel;
     }
