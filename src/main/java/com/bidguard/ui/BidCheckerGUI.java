@@ -8,6 +8,7 @@ import com.bidguard.ocr.OcrServiceFactory;
 import com.bidguard.pdf.PdfAnnotator;
 import com.bidguard.pdf.PdfTask;
 import com.bidguard.pdf.PdfTextExtractor;
+import com.bidguard.sealremover.SealRemovalService;
 
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
@@ -60,6 +61,19 @@ public class BidCheckerGUI extends JFrame {
     private JTextArea ocrConfigArea;
     private File selectedOcrFile;
 
+    // 去红章选项卡组件
+    private JLabel sealPdfFileLabel;
+    private JComboBox<SealRemovalService.Algorithm> sealAlgorithmCombo;
+    private JSpinner sealDpiSpinner;
+    private JButton sealSelectFileButton;
+    private JButton sealProcessButton;
+    private JButton sealRunOcrButton;
+    private JButton sealOpenReportButton;
+    private JTextArea sealLogArea;
+    private JTextArea sealOcrResultArea;
+    private File sealSelectedFile;
+    private SealRemovalService.RemovalResult sealCurrentResult;
+
     // 功能: 初始化主界面组件并设置默认文件
     public BidCheckerGUI() {
         setTitle("BidGuard 智能文档处理工具");
@@ -75,6 +89,9 @@ public class BidCheckerGUI extends JFrame {
 
         JPanel ocrPanel = createOcrPanel();
         tabbedPane.addTab("OCR识别", ocrPanel);
+
+        JPanel sealPanel = createSealRemovalPanel();
+        tabbedPane.addTab("去红章", sealPanel);
 
         add(tabbedPane, BorderLayout.CENTER);
 
@@ -1593,6 +1610,308 @@ public class BidCheckerGUI extends JFrame {
             JOptionPane.showMessageDialog(this,
                 "无法打开输出目录: " + ex.getMessage(),
                 "警告", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+
+    // =========================================================================
+    // 去红章标签页
+    // =========================================================================
+
+    // 功能: 构建去红章选项卡界面布局
+    private JPanel createSealRemovalPanel() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        // === 左侧控制面板 ===
+        JPanel leftPanel = new JPanel(new BorderLayout(5, 5));
+        leftPanel.setPreferredSize(new Dimension(280, 0));
+
+        // 文件选择
+        JPanel filePanel = new JPanel(new BorderLayout(5, 5));
+        filePanel.setBorder(BorderFactory.createTitledBorder("输入PDF（扫描件）"));
+
+        sealPdfFileLabel = new JLabel("未选择文件");
+        sealPdfFileLabel.setFont(sealPdfFileLabel.getFont().deriveFont(Font.PLAIN, 12f));
+        sealSelectFileButton = new JButton("选择 PDF");
+        sealSelectFileButton.addActionListener(e -> sealSelectFile());
+
+        JPanel fileLabelPanel = new JPanel(new BorderLayout(3, 0));
+        fileLabelPanel.add(sealSelectFileButton, BorderLayout.WEST);
+        fileLabelPanel.add(sealPdfFileLabel, BorderLayout.CENTER);
+        filePanel.add(fileLabelPanel, BorderLayout.NORTH);
+
+        // 算法选择
+        JPanel algoPanel = new JPanel(new BorderLayout(5, 5));
+        algoPanel.setBorder(BorderFactory.createTitledBorder("去章算法"));
+        sealAlgorithmCombo = new JComboBox<>(SealRemovalService.Algorithm.values());
+        sealAlgorithmCombo.setSelectedItem(SealRemovalService.Algorithm.DOCUMENT);
+        algoPanel.add(sealAlgorithmCombo, BorderLayout.CENTER);
+
+        JTextArea algoDesc = new JTextArea(
+            "DOCUMENT：HSV色彩空间+形态学，最佳综合效果\n" +
+            "PRECISE：先定位印章区域再去除，精度最高\n" +
+            "SIMPLE：直接替换红色像素，速度最快");
+        algoDesc.setEditable(false);
+        algoDesc.setLineWrap(true);
+        algoDesc.setWrapStyleWord(true);
+        algoDesc.setFont(algoDesc.getFont().deriveFont(Font.PLAIN, 11f));
+        algoDesc.setBackground(new Color(248, 248, 248));
+        algoDesc.setBorder(null);
+        algoPanel.add(algoDesc, BorderLayout.SOUTH);
+
+        // DPI 设置
+        JPanel dpiPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        dpiPanel.setBorder(BorderFactory.createTitledBorder("渲染DPI（越高越慢越清晰）"));
+        sealDpiSpinner = new JSpinner(new SpinnerNumberModel(200, 72, 400, 50));
+        sealDpiSpinner.setPreferredSize(new Dimension(80, 28));
+        dpiPanel.add(new JLabel("DPI:"));
+        dpiPanel.add(sealDpiSpinner);
+        dpiPanel.add(new JLabel("  推荐 200（OCR前送去200即可）"));
+
+        // 操作按钮
+        JPanel btnPanel = new JPanel(new GridLayout(3, 1, 5, 8));
+        btnPanel.setBorder(BorderFactory.createTitledBorder("操作"));
+
+        sealProcessButton = new JButton("① 执行去章 + 保存PNG");
+        sealProcessButton.setEnabled(false);
+        sealProcessButton.setToolTipText("渲染PDF每页 → 去除红章 → 保存原图/去章PNG → 生成HTML对比报告");
+        sealProcessButton.addActionListener(e -> sealProcess());
+
+        sealRunOcrButton = new JButton("② 送阿里云OCR识别");
+        sealRunOcrButton.setEnabled(false);
+        sealRunOcrButton.setToolTipText("将去章后的图像送阿里云OCR，识别文字内容");
+        sealRunOcrButton.addActionListener(e -> sealRunOcr());
+
+        sealOpenReportButton = new JButton("打开HTML对比报告");
+        sealOpenReportButton.setEnabled(false);
+        sealOpenReportButton.setToolTipText("在浏览器中打开原图/去章图并排对比的HTML报告");
+        sealOpenReportButton.addActionListener(e -> sealOpenReport());
+
+        btnPanel.add(sealProcessButton);
+        btnPanel.add(sealRunOcrButton);
+        btnPanel.add(sealOpenReportButton);
+
+        // 拼装左侧
+        JPanel leftTop = new JPanel(new BorderLayout(5, 5));
+        leftTop.add(filePanel, BorderLayout.NORTH);
+        leftTop.add(algoPanel, BorderLayout.CENTER);
+
+        JPanel leftBottom = new JPanel(new BorderLayout(5, 8));
+        leftBottom.add(dpiPanel, BorderLayout.NORTH);
+        leftBottom.add(btnPanel, BorderLayout.CENTER);
+
+        leftPanel.add(leftTop, BorderLayout.NORTH);
+        leftPanel.add(leftBottom, BorderLayout.SOUTH);
+
+        // === 右侧：日志区 + OCR结果区 ===
+        sealLogArea = new JTextArea();
+        sealLogArea.setEditable(false);
+        sealLogArea.setLineWrap(true);
+        sealLogArea.setWrapStyleWord(true);
+        sealLogArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        JScrollPane logScroll = new JScrollPane(sealLogArea);
+        logScroll.setBorder(BorderFactory.createTitledBorder("处理日志"));
+
+        sealOcrResultArea = new JTextArea();
+        sealOcrResultArea.setEditable(false);
+        sealOcrResultArea.setLineWrap(true);
+        sealOcrResultArea.setWrapStyleWord(true);
+        JScrollPane ocrScroll = new JScrollPane(sealOcrResultArea);
+        ocrScroll.setBorder(BorderFactory.createTitledBorder("OCR识别结果（去章后）"));
+
+        JSplitPane rightSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, logScroll, ocrScroll);
+        rightSplit.setResizeWeight(0.55);
+        rightSplit.setContinuousLayout(true);
+
+        // 整体
+        JSplitPane mainSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftPanel, rightSplit);
+        mainSplit.setResizeWeight(0.0);
+        mainSplit.setContinuousLayout(true);
+
+        panel.add(mainSplit, BorderLayout.CENTER);
+
+        // 初始提示
+        sealLogArea.setText(
+            "使用说明：\n" +
+            "1. 选择一个扫描件 PDF（含红章）\n" +
+            "2. 选择去章算法（推荐 DOCUMENT）\n" +
+            "3. 点击「① 执行去章 + 保存PNG」\n" +
+            "   → 每页生成 page_XXX_original.png 和 page_XXX_no_seal.png\n" +
+            "   → 生成 HTML 对比报告（原图/去章图并排）\n" +
+            "4. 人工查看 HTML 报告确认效果\n" +
+            "5. 点击「② 送阿里云OCR识别」获取文字内容\n\n" +
+            "中间文件输出目录：output/seal_removal_<文件名>_<时间戳>/\n"
+        );
+
+        return panel;
+    }
+
+    // 功能: 去章标签页 - 选择PDF文件
+    private void sealSelectFile() {
+        JFileChooser fc = new JFileChooser(getTestFilesDirectory());
+        fc.setFileFilter(new FileNameExtensionFilter("PDF 文件", "pdf"));
+        fc.setDialogTitle("选择扫描件 PDF");
+        if (fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            sealSelectedFile = fc.getSelectedFile();
+            sealPdfFileLabel.setText(sealSelectedFile.getName());
+            sealPdfFileLabel.setToolTipText(sealSelectedFile.getAbsolutePath());
+            sealProcessButton.setEnabled(true);
+            sealRunOcrButton.setEnabled(false);
+            sealOpenReportButton.setEnabled(false);
+            sealCurrentResult = null;
+            sealLogArea.setText("已选择: " + sealSelectedFile.getAbsolutePath() + "\n\n点击「① 执行去章 + 保存PNG」开始处理。\n");
+            sealOcrResultArea.setText("");
+        }
+    }
+
+    // 功能: 去章标签页 - 执行去章主流程
+    private void sealProcess() {
+        if (sealSelectedFile == null || !sealSelectedFile.exists()) {
+            JOptionPane.showMessageDialog(this, "请先选择PDF文件", "提示", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        SealRemovalService.Algorithm algo =
+            (SealRemovalService.Algorithm) sealAlgorithmCombo.getSelectedItem();
+        int dpi = (Integer) sealDpiSpinner.getValue();
+
+        sealProcessButton.setEnabled(false);
+        sealRunOcrButton.setEnabled(false);
+        sealOpenReportButton.setEnabled(false);
+        sealLogArea.setText("");
+        sealOcrResultArea.setText("");
+        progressBar.setIndeterminate(true);
+        progressBar.setString("去章处理中...");
+
+        File pdfFile = sealSelectedFile;
+
+        SwingWorker<SealRemovalService.RemovalResult, String> worker = new SwingWorker<>() {
+            @Override
+            protected SealRemovalService.RemovalResult doInBackground() throws Exception {
+                return SealRemovalService.processPages(pdfFile, algo, dpi, msg -> publish(msg + "\n"));
+            }
+
+            @Override
+            protected void process(java.util.List<String> chunks) {
+                for (String s : chunks) sealLogArea.append(s);
+                sealLogArea.setCaretPosition(sealLogArea.getDocument().getLength());
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    sealCurrentResult = get();
+                    sealLogArea.append("\n✅ 处理完成！\n");
+                    sealLogArea.append("共 " + sealCurrentResult.pages.size() + " 页\n");
+                    sealLogArea.append("输出目录: " + sealCurrentResult.outputDir.getAbsolutePath() + "\n");
+                    sealLogArea.append("HTML报告: " + sealCurrentResult.htmlReport.getName() + "\n\n");
+                    sealLogArea.append("查看 HTML 报告确认效果后，可点击「② 送阿里云OCR识别」。\n");
+
+                    sealRunOcrButton.setEnabled(true);
+                    sealOpenReportButton.setEnabled(true);
+
+                    JOptionPane.showMessageDialog(BidCheckerGUI.this,
+                        String.format("去章完成！共 %d 页\n\n中间文件保存在：\n%s",
+                            sealCurrentResult.pages.size(),
+                            sealCurrentResult.outputDir.getAbsolutePath()),
+                        "完成", JOptionPane.INFORMATION_MESSAGE);
+                } catch (Exception ex) {
+                    LOGGER.log(Level.SEVERE, "去章处理失败", ex);
+                    sealLogArea.append("\n❌ 处理失败: " + ex.getMessage() + "\n");
+                    JOptionPane.showMessageDialog(BidCheckerGUI.this,
+                        "去章处理失败:\n" + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+                } finally {
+                    sealProcessButton.setEnabled(true);
+                    progressBar.setIndeterminate(false);
+                    progressBar.setString("就绪");
+                }
+            }
+        };
+        worker.execute();
+    }
+
+    // 功能: 去章标签页 - 送 OCR
+    private void sealRunOcr() {
+        if (sealCurrentResult == null) {
+            JOptionPane.showMessageDialog(this, "请先执行去章处理", "提示", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        sealRunOcrButton.setEnabled(false);
+        sealOcrResultArea.setText("");
+        progressBar.setIndeterminate(true);
+        progressBar.setString("OCR识别中...");
+
+        SealRemovalService.RemovalResult result = sealCurrentResult;
+
+        SwingWorker<String, String> worker = new SwingWorker<>() {
+            @Override
+            protected String doInBackground() throws Exception {
+                return SealRemovalService.runOcr(result, msg -> publish(msg + "\n"));
+            }
+
+            @Override
+            protected void process(java.util.List<String> chunks) {
+                for (String s : chunks) sealLogArea.append(s);
+                sealLogArea.setCaretPosition(sealLogArea.getDocument().getLength());
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    String text = get();
+                    sealOcrResultArea.setText(text);
+                    sealOcrResultArea.setCaretPosition(0);
+
+                    // 保存 OCR 结果到文件
+                    File ocrOut = new File(sealCurrentResult.outputDir,
+                        sealSelectedFile.getName().replaceAll("(?i)\\.pdf$", "") + "_ocr_result.txt");
+                    try (java.io.OutputStreamWriter w = new java.io.OutputStreamWriter(
+                            new java.io.FileOutputStream(ocrOut),
+                            java.nio.charset.StandardCharsets.UTF_8)) {
+                        w.write(text);
+                    }
+                    sealLogArea.append("\nOCR文本已保存: " + ocrOut.getName() + "\n");
+
+                    JOptionPane.showMessageDialog(BidCheckerGUI.this,
+                        "OCR识别完成！\n共 " + sealCurrentResult.pages.size() + " 页\n" +
+                        "识别文本已保存至:\n" + ocrOut.getAbsolutePath(),
+                        "OCR完成", JOptionPane.INFORMATION_MESSAGE);
+                } catch (Exception ex) {
+                    LOGGER.log(Level.SEVERE, "OCR失败", ex);
+                    sealLogArea.append("\n❌ OCR失败: " + ex.getMessage() + "\n");
+                    JOptionPane.showMessageDialog(BidCheckerGUI.this,
+                        "OCR失败:\n" + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+                } finally {
+                    sealRunOcrButton.setEnabled(true);
+                    progressBar.setIndeterminate(false);
+                    progressBar.setString("就绪");
+                }
+            }
+        };
+        worker.execute();
+    }
+
+    // 功能: 去章标签页 - 在浏览器打开HTML对比报告
+    private void sealOpenReport() {
+        if (sealCurrentResult == null || sealCurrentResult.htmlReport == null
+                || !sealCurrentResult.htmlReport.exists()) {
+            JOptionPane.showMessageDialog(this, "HTML报告不存在，请先执行去章处理", "提示",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        try {
+            if (Desktop.isDesktopSupported()
+                    && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                Desktop.getDesktop().browse(sealCurrentResult.htmlReport.toURI());
+            } else {
+                JOptionPane.showMessageDialog(this,
+                    "请手动用浏览器打开:\n" + sealCurrentResult.htmlReport.getAbsolutePath(),
+                    "提示", JOptionPane.INFORMATION_MESSAGE);
+            }
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this,
+                "打开失败:\n" + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
         }
     }
 
