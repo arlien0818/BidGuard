@@ -243,14 +243,24 @@ public class BidCheckerGUI extends JFrame {
         annotatePdfButton.setEnabled(false);
         batchRunButton.setEnabled(false);
         
+        // 根据模式更新批量按钮文字和提示
+        boolean isTxtMode = txtRadio.isSelected();
+        if (isTxtMode) {
+            batchRunButton.setText("批量执行查重");
+            batchRunButton.setToolTipText("对所有生成的配对依次执行查重并保存报告（TXT模式，无标注功能）");
+        } else {
+            batchRunButton.setText("批量执行查重并标注");
+            batchRunButton.setToolTipText("对所有生成的配对依次执行 OCR/查重/保存/标注（会缓存 OCR）");
+        }
+        
         // 提示用户
-        if (txtRadio.isSelected()) {
+        if (isTxtMode) {
             annotationLogArea.append("已切换到 TXT 模式，请选择文本文件。\n");
-            annotationLogArea.append("TXT 模式支持：文本对比、查重报告生成。\n");
-            annotationLogArea.append("不支持：PDF标注功能（无位置信息）。\n");
+            annotationLogArea.append("TXT 模式支持：文本对比、两两查重报告生成、批量查重。\n");
+            annotationLogArea.append("不支持：PDF标注功能（TXT文件无位置坐标信息）。\n");
         } else {
             annotationLogArea.append("已切换到 PDF 模式，请选择 PDF 文件。\n");
-            annotationLogArea.append("PDF 模式支持全部功能：文本对比、查重报告、PDF标注、批量处理。\n");
+            annotationLogArea.append("PDF 模式支持全部功能：文本对比、两两查重报告、PDF标注、批量处理。\n");
         }
     }
 
@@ -357,12 +367,12 @@ public class BidCheckerGUI extends JFrame {
             compareResultArea.setText("");
             annotationLogArea.setText("");
             
-            // 更新按钮状态（TXT模式下禁用标注功能）
+            // 更新按钮状态（TXT模式下仅禁用PDF标注功能）
             readAllFilesButton.setEnabled(files.length == 2);
             compareButton.setEnabled(false);
-            generateAnnotationDataButton.setEnabled(!isTxtMode && false);  // TXT模式禁用
-            annotatePdfButton.setEnabled(false);
-            batchRunButton.setEnabled(!isTxtMode && files.length >= 2);  // TXT模式禁用
+            generateAnnotationDataButton.setEnabled(false);
+            annotatePdfButton.setEnabled(false);  // TXT模式下始终禁用
+            batchRunButton.setEnabled(files.length >= 2);  // TXT和PDF都支持批量
             
             LOGGER.info("已选择 " + files.length + " 个" + fileType + "文件");
             for (File file : files) {
@@ -374,15 +384,16 @@ public class BidCheckerGUI extends JFrame {
                 annotationLogArea.append("已选择2个文件，可以进行对比操作。\n");
                 annotationLogArea.append("请点击\"读取所选文件\"按钮继续。\n");
                 if (isTxtMode) {
-                    annotationLogArea.append("\n注意：TXT模式下仅支持文本对比功能。\n");
+                    annotationLogArea.append("\n注意：TXT模式支持文本对比和查重报告，不支持PDF标注。\n");
                 }
             } else {
                 annotationLogArea.append(String.format("已选择%d个文件。\n", files.length));
+                annotationLogArea.append("• 可点击\"测试配对生成器\"查看所有可能的配对组合\n");
+                annotationLogArea.append("• 可点击\"" + batchRunButton.getText() + "\"进行两两对比\n");
                 if (isTxtMode) {
-                    annotationLogArea.append("• TXT模式仅支持选2个文件的对比，请重新选择2个文件\n");
+                    annotationLogArea.append("• TXT模式支持批量查重，但不支持PDF标注\n");
                 } else {
-                    annotationLogArea.append("• 如需对比2个文件，请重新选择2个文件\n");
-                    annotationLogArea.append("• 可点击\"测试配对生成器\"查看所有可能的配对组合\n");
+                    annotationLogArea.append("• 如需单独对比2个文件，请重新选择2个文件\n");
                 }
             }
         }
@@ -1083,31 +1094,155 @@ public class BidCheckerGUI extends JFrame {
             "测试完成", JOptionPane.INFORMATION_MESSAGE);
     }
 
-    // 功能: 批量执行查重并标注（生成 pairs -> OCR(缓存) -> detect -> save JSON -> annotate）
+    // 功能: 批量执行查重并标注（支持TXT和PDF）
     private void runBatchDuplicateAndAnnotate() {
         if (selectedFiles.size() < 2) {
-            JOptionPane.showMessageDialog(this, "请至少选择2个PDF文件！", "提示", JOptionPane.WARNING_MESSAGE);
+            String fileType = txtRadio.isSelected() ? "TXT" : "PDF";
+            JOptionPane.showMessageDialog(this, "请至少选择2个" + fileType + "文件！", "提示", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
-        // 构造 PdfTask 列表
-        List<PdfTask> tasks = new ArrayList<>();
-        for (File f : selectedFiles) tasks.add(new PdfTask(f));
-
+        boolean isTxtMode = txtRadio.isSelected();
+        
         // 清空结果区并开始任务
         annotationLogArea.setText("");
         progressBar.setIndeterminate(true);
-        progressBar.setString("正在批量执行查重并标注...");
+        progressBar.setString("正在批量执行查重" + (isTxtMode ? "..." : "并标注..."));
 
         // 禁用相关按钮
         batchRunButton.setEnabled(false);
         selectFilesButton.setEnabled(false);
         readAllFilesButton.setEnabled(false);
 
+        if (isTxtMode) {
+            // TXT模式：批量查重（不涉及OCR和PDF标注）
+            runBatchTxtDuplicateCheck();
+        } else {
+            // PDF模式：批量查重并标注
+            runBatchPdfDuplicateAndAnnotate();
+        }
+    }
+
+    // 功能: 批量执行TXT文件查重
+    private void runBatchTxtDuplicateCheck() {
         SwingWorker<Map<FilePair, File>, String> worker = new SwingWorker<>() {
             @Override
             protected Map<FilePair, File> doInBackground() {
-                publish("开始批量处理...\n");
+                publish("开始批量TXT查重处理...\n\n");
+                
+                // 生成所有配对
+                List<FilePair> pairs = PairGenerator.generatePairs(selectedFiles);
+                publish(String.format("生成 %d 个文件配对\n\n", pairs.size()));
+                
+                Map<FilePair, File> resultMap = new LinkedHashMap<>();
+                int minLength = SimilarityConfig.getInstance().substringMinLength;
+                
+                for (int i = 0; i < pairs.size(); i++) {
+                    FilePair pair = pairs.get(i);
+                    File fileA = pair.getFileA();
+                    File fileB = pair.getFileB();
+                    
+                    publish(String.format("=".repeat(60) + "\n"));
+                    publish(String.format("处理配对 %d/%d: %s\n", i + 1, pairs.size(), pair.toString()));
+                    publish(String.format("=".repeat(60) + "\n"));
+                    
+                    try {
+                        // 读取TXT文件内容
+                        publish("读取文件 A: " + fileA.getName() + "...\n");
+                        String textA = readTextFile(fileA);
+                        publish(String.format("  文件 A: %d 字符\n", textA.length()));
+                        
+                        publish("读取文件 B: " + fileB.getName() + "...\n");
+                        String textB = readTextFile(fileB);
+                        publish(String.format("  文件 B: %d 字符\n\n", textB.length()));
+                        
+                        // 执行查重检测
+                        publish("执行查重检测...\n");
+                        OcrDuplicateDetector.DuplicateDetectionResult detection = 
+                            OcrDuplicateDetector.detectDuplicatesFromText(
+                                textA, textB,
+                                fileA.getName(), fileB.getName(),
+                                minLength
+                            );
+                        
+                        publish(String.format("  重复片段: %d 个\n", detection.totalMatches));
+                        publish(String.format("  Jaccard相似度: %.2f%%\n", detection.jaccardScore));
+                        publish(String.format("  增强相似度: %.2f%%\n\n", detection.enhancedSimilarityScore));
+                        
+                        // 保存结果
+                        publish("保存查重报告...\n");
+                        File jsonFile = OcrDuplicateDetector.saveTextDuplicateResult(
+                            detection,
+                            fileA.getName(),
+                            fileB.getName()
+                        );
+                        
+                        publish("  JSON文件: " + jsonFile.getName() + "\n");
+                        publish("  TXT报告: " + jsonFile.getName().replace(".json", ".txt").replace("duplicate_detection_", "duplicate_report_") + "\n\n");
+                        
+                        resultMap.put(pair, jsonFile);
+                        
+                    } catch (Exception ex) {
+                        LOGGER.log(Level.SEVERE, "处理配对失败: " + pair.toString(), ex);
+                        publish("  ✗ 失败: " + ex.getMessage() + "\n\n");
+                    }
+                }
+                
+                publish(String.format("\n批量处理完成！共生成 %d 个查重报告\n", resultMap.size()));
+                return resultMap;
+            }
+
+            @Override
+            protected void process(List<String> chunks) {
+                for (String m : chunks) {
+                    annotationLogArea.append(m);
+                }
+                annotationLogArea.setCaretPosition(annotationLogArea.getDocument().getLength());
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    Map<FilePair, File> map = get();
+                    annotationLogArea.append("\n" + "=".repeat(60) + "\n");
+                    annotationLogArea.append("处理汇总\n");
+                    annotationLogArea.append("=".repeat(60) + "\n");
+                    for (Map.Entry<FilePair, File> e : map.entrySet()) {
+                        annotationLogArea.append(String.format("%s\n  -> %s\n", 
+                            e.getKey().toString(), e.getValue().getName()));
+                    }
+                    annotationLogArea.append("=".repeat(60) + "\n");
+                    
+                    JOptionPane.showMessageDialog(BidCheckerGUI.this,
+                        String.format("批量TXT查重完成！\n\n共生成 %d 个查重报告\n\n报告保存在 output/ 目录", map.size()),
+                        "完成", JOptionPane.INFORMATION_MESSAGE);
+                } catch (Exception ex) {
+                    LOGGER.log(Level.SEVERE, "批量处理失败", ex);
+                    JOptionPane.showMessageDialog(BidCheckerGUI.this,
+                        "批量处理失败: " + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+                } finally {
+                    progressBar.setIndeterminate(false);
+                    progressBar.setString("就绪");
+                    batchRunButton.setEnabled(true);
+                    selectFilesButton.setEnabled(true);
+                    readAllFilesButton.setEnabled(selectedFiles.size() == 2);
+                }
+            }
+        };
+
+        worker.execute();
+    }
+
+    // 功能: 批量执行PDF文件查重并标注
+    private void runBatchPdfDuplicateAndAnnotate() {
+        // 构造 PdfTask 列表
+        List<PdfTask> tasks = new ArrayList<>();
+        for (File f : selectedFiles) tasks.add(new PdfTask(f));
+
+        SwingWorker<Map<FilePair, File>, String> worker = new SwingWorker<>() {
+            @Override
+            protected Map<FilePair, File> doInBackground() {
+                publish("开始批量PDF处理...\n");
                 Map<FilePair, File> results = BatchDuplicateRunner.runBatchDuplicateCheck(tasks);
                 publish(String.format("批量处理完成，生成 %d 个 JSON 结果。\n", results.size()));
                 return results;
@@ -1149,6 +1284,19 @@ public class BidCheckerGUI extends JFrame {
         };
 
         worker.execute();
+    }
+
+    // 功能: 读取TXT文件内容
+    private String readTextFile(File file) throws IOException {
+        StringBuilder text = new StringBuilder();
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.FileReader(file, java.nio.charset.StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                text.append(line).append("\n");
+            }
+        }
+        return text.toString();
     }
 
     // 功能: 启动 Swing 应用入口

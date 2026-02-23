@@ -1068,7 +1068,7 @@ public class BidChecker {
             } else if (name1.endsWith(".xlsx")) {
                 text1 = readExcel(file1);
             } else if (name1.endsWith(".txt")) {
-                text1 = new String(java.nio.file.Files.readAllBytes(file1.toPath()));
+                text1 = new String(java.nio.file.Files.readAllBytes(file1.toPath()), java.nio.charset.StandardCharsets.UTF_8);
             } else {
                 return "暂不支持的文件类型: " + name1;
             }
@@ -1080,7 +1080,7 @@ public class BidChecker {
             } else if (name2.endsWith(".xlsx")) {
                 text2 = readExcel(file2);
             } else if (name2.endsWith(".txt")) {
-                text2 = new String(java.nio.file.Files.readAllBytes(file2.toPath()));
+                text2 = new String(java.nio.file.Files.readAllBytes(file2.toPath()), java.nio.charset.StandardCharsets.UTF_8);
             } else {
                 return "暂不支持的文件类型: " + name2;
             }
