@@ -27,9 +27,17 @@ public class PdfAnnotator {
     private static final float STROKE_WIDTH = 2.0f;
     
     // DPI转换（OCR图像渲染DPI vs PDF原生DPI）
-    private static final float OCR_RENDER_DPI = 200.0f; // 必须与OcrServiceFactory中的renderImageWithDPI参数一致
+    // 注意：这里的OCR_RENDER_DPI必须与配置文件中ocr.render.dpi一致
     private static final float PDF_NATIVE_DPI = 72.0f;  // PDF默认坐标单位（点）
-    private static final float DPI_SCALE = PDF_NATIVE_DPI / OCR_RENDER_DPI; // 0.36
+    
+    /**
+     * 获取DPI缩放比例（从配置动态计算）
+     */
+    private static float getDpiScale() {
+        SimilarityConfig config = SimilarityConfig.getInstance();
+        float ocrRenderDpi = config.ocrRenderDpi;
+        return PDF_NATIVE_DPI / ocrRenderDpi;
+    }
     
     // 坐标网格（调试用）
     private static final boolean DRAW_COORDINATE_GRID = true; // 是否绘制坐标网格
@@ -230,16 +238,20 @@ public class PdfAnnotator {
         float pageWidth = mediaBox.getWidth();
         float pageHeight = mediaBox.getHeight();
         
-        // 计算OCR渲染图像的尺寸（基于OCR_RENDER_DPI）
+        // 从配置获取OCR渲染DPI
+        SimilarityConfig config = SimilarityConfig.getInstance();
+        float ocrRenderDpi = config.ocrRenderDpi;
+        
+        // 计算OCR渲染图像的尺寸（基于配置的DPI）
         // 无论PDF原始尺寸是多少，我们都按固定DPI重新渲染
         // 例如：A4纸PDF(595×842点) → 按200 DPI渲染 → 图像(1653×2339像素)
-        float renderImageWidth = pageWidth * (OCR_RENDER_DPI / PDF_NATIVE_DPI);
-        float renderImageHeight = pageHeight * (OCR_RENDER_DPI / PDF_NATIVE_DPI);
+        float renderImageWidth = pageWidth * (ocrRenderDpi / PDF_NATIVE_DPI);
+        float renderImageHeight = pageHeight * (ocrRenderDpi / PDF_NATIVE_DPI);
         
         // 计算缩放比例：OCR图像坐标 → PDF坐标
         // 这个比例对任意尺寸的PDF都适用（只要长宽比一致）
-        float scaleX = pageWidth / renderImageWidth;   // = 72/200 = 0.36
-        float scaleY = pageHeight / renderImageHeight; // = 72/200 = 0.36
+        float scaleX = pageWidth / renderImageWidth;   // 例如: 72/200 = 0.36
+        float scaleY = pageHeight / renderImageHeight; // 例如: 72/200 = 0.36
         
         // 调试信息：首次标注时输出页面信息
         if (bboxes.size() > 0 && LOGGER.isLoggable(java.util.logging.Level.FINE)) {

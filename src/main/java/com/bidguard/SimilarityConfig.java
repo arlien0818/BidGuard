@@ -80,6 +80,10 @@ public class SimilarityConfig {
     public final int ocrImageMaxDimension;
     public final float ocrJpegQuality;
     
+    // ========== OCR 渲染参数 ==========
+    public final int ocrRenderDpi;           // PDF渲染为图片的DPI（影响识别精度）
+    public final boolean ocrRemoveSealEnabled; // 是否在OCR识别前去除红章（预留）
+    
     // ========== OCR 服务配置 ==========
     public final String ocrType;  // local 或 aliyun
     public final String ocrLocalUrl;
@@ -148,6 +152,10 @@ public class SimilarityConfig {
         
         ocrImageMaxDimension = getIntProperty("ocr.image.max.dimension", 800);
         ocrJpegQuality = (float) getDoubleProperty("ocr.jpeg.quality", 0.85);
+        
+        // OCR 渲染参数
+        ocrRenderDpi = getIntProperty("ocr.render.dpi", 200);
+        ocrRemoveSealEnabled = getBooleanProperty("ocr.remove.seal.enabled", false);
         
         // OCR 服务配置
         ocrType = getStringProperty("ocr.type", "local");

@@ -43,7 +43,8 @@ Main → BidCheckerGUI (Swing UI)
 `PdfTask.ensureOcr()` 以双重检查锁（DCL）懒加载 OCR 结果。实际调用 `OcrServiceFactory.recognizePdf()`:
 - 先查文件缓存（按 PDF 修改时间判断有效性），命中则跳过识别
 - 根据 `config.properties` 中 `ocr.type` 配置，选择本地 EasyOCR（`OcrServiceClient`，HTTP 调 `localhost:5001`）或阿里云 OCR
-- 识别前由 `PdfPageRenderer.renderPage()` 将 PDF 页渲染为图片，可选经 `SimpleSealRemover.removeSeal()` 去除红色公章
+- 识别前由 `PdfPageRenderer.renderPage()` 将 PDF 页渲染为图片，**DPI 从配置文件读取**（`ocr.render.dpi`，默认 200）
+- **可选去红章**：如果 `ocr.remove.seal.enabled=true`，则在识别前调用 `SimpleSealRemover.removeSeal()` 去除红色公章（当前默认关闭）
 - 识别结果包含每个文字块的 text、confidence、bbox（边界框坐标），缓存到 JSON 文件
 
 ### 4. 相似度计算（BidChecker 核心算法）
@@ -99,7 +100,7 @@ Main → BidCheckerGUI (Swing UI)
 
 ### 6. PDF 标注
 
-`PdfAnnotator.annotatePdfs()` 读取查重 JSON，将 OCR 坐标（200 DPI）按 `DPI_SCALE = 0.36` 换算到 PDF 坐标（72 DPI），用 PDFBox 在原 PDF 上绘制半透明红色矩形框标记重复区域，输出标注后的 PDF。
+`PdfAnnotator.annotatePdfs()` 读取查重 JSON，将 OCR 坐标动态换算到 PDF 坐标（根据配置的 `ocr.render.dpi` 计算缩放比例），用 PDFBox 在原 PDF 上绘制半透明红色矩形框标记重复区域，输出标注后的 PDF。
 
 ### 7. 批量编排
 
@@ -108,3 +109,28 @@ Main → BidCheckerGUI (Swing UI)
 ## 配置系统
 
 `SimilarityConfig` 单例从 `config.properties`（UTF-8）加载所有参数，敏感信息（阿里云 AK）从未纳入版本控制的 `local.properties` 加载。支持 `reload()` 热重载。所有算法阈值、权重、N-Gram 大小等均可通过配置文件调整，无需重新编译。
+
+### 关键配置项
+
+**OCR 渲染参数**：
+- `ocr.render.dpi`：PDF 渲染为图片的 DPI，影响识别精度和速度（默认 200）
+- `ocr.remove.seal.enabled`：是否在识别前去除红章（默认 false，预留功能）
+
+**OCR 服务配置**：
+- `ocr.type`：OCR 引擎类型（local/aliyun）
+- `ocr.image.max.dimension`：图片压缩最大边长（默认 1200）
+- `ocr.jpeg.quality`：JPEG 压缩质量（默认 0.85）
+
+**相似度算法参数**：
+- `substring.min.length`：连续重复片段最小长度（默认 30 字符）
+- `paragraph.similarity.threshold`：段落相似度阈值（默认 85%）
+- `similarity.weight.*`：综合相似度各维度权重配置
+
+## 最近改进（2026-02-23）
+
+### OCR 流程优化与模块化
+- **DPI 配置化**：将硬编码的渲染 DPI 提取为配置项 `ocr.render.dpi`，支持用户根据文档质量动态调整（150-300 DPI）
+- **去红章预留接口**：在 `OcrServiceFactory` 中添加可选的去红章步骤，通过 `ocr.remove.seal.enabled` 控制，为将来的去红章功能模块做好准备
+- **坐标转换动态化**：`PdfAnnotator` 的 DPI 缩放比例从配置动态计算，消除硬编码，确保标注坐标始终与识别 DPI 一致
+- **代码解耦**：确认 `PdfPageRenderer`、`OcrServiceFactory`、`SimpleSealRemover` 等模块完全独立，为独立的去红章功能模块奠定基础
+

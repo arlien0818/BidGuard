@@ -1,6 +1,8 @@
 # 示例配置文件（提交到仓库）
 # 请不要在此文件中放置任何真实的密钥或敏感信息。
 
+# ========== OCR 服务配置 ==========
+
 # OCR 服务类型: local 或 aliyun
 ocr.type=aliyun
 
@@ -14,3 +16,25 @@ ocr.aliyun.endpoint=ocr-api.cn-hangzhou.aliyuncs.com
 # 内容示例：
 # ocr.aliyun.access.key.id=你的AccessKeyId
 # ocr.aliyun.access.key.secret=你的AccessKeySecret
+
+# ========== OCR 渲染参数 ==========
+
+# PDF渲染为图片时的DPI（影响OCR识别精度和处理速度）
+# 推荐值: 150-300，越高越精确但速度越慢
+# 默认: 200
+ocr.render.dpi=200
+
+# 是否在OCR识别前去除红章（预留功能，当前默认关闭）
+# 设置为true可提高印章区域的文字识别率
+# 默认: false
+ocr.remove.seal.enabled=false
+
+# ========== OCR 图片压缩参数 ==========
+
+# 图片压缩最大边长（像素）
+# 默认: 800
+ocr.image.max.dimension=800
+
+# JPEG 压缩品质 (0.0-1.0)
+# 默认: 0.85
+ocr.jpeg.quality=0.85

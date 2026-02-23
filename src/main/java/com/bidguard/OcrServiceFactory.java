@@ -197,8 +197,15 @@ public class OcrServiceFactory {
             for (int pageIndex = 0; pageIndex < pageCount; pageIndex++) {
                 LOGGER.info(String.format("正在识别第 %d/%d 页...", pageIndex + 1, pageCount));
                 
-                // 渲染 PDF 页面为图片
-                BufferedImage pageImage = renderer.renderImageWithDPI(pageIndex, 200);
+                // 渲染 PDF 页面为图片（使用配置的DPI）
+                int renderDpi = config.ocrRenderDpi;
+                BufferedImage pageImage = renderer.renderImageWithDPI(pageIndex, renderDpi);
+                
+                // 可选：去除红章（当前默认关闭，预留给将来的去红章功能）
+                if (config.ocrRemoveSealEnabled) {
+                    LOGGER.info("执行红章去除...");
+                    pageImage = SimpleSealRemover.removeSeal(pageImage);
+                }
                 
                 // 调用阿里云 OCR 识别
                 OcrServiceClient.OcrResult pageResult = recognizeImageWithAliyun(pageImage);
@@ -345,6 +352,14 @@ public class OcrServiceFactory {
      * 使用阿里云 OCR 识别图片
      */
     private static OcrServiceClient.OcrResult recognizeImageWithAliyun(BufferedImage image) {
+        SimilarityConfig config = SimilarityConfig.getInstance();
+        
+        // 可选：去除红章（当前默认关闭，预留给将来的去红章功能）
+        if (config.ocrRemoveSealEnabled) {
+            LOGGER.info("执行红章去除...");
+            image = SimpleSealRemover.removeSeal(image);
+        }
+        
         OcrServiceClient.OcrResult result = new OcrServiceClient.OcrResult();
         result.engine = "aliyun";
         

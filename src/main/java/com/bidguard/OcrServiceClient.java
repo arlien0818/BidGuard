@@ -184,13 +184,17 @@ public class OcrServiceClient {
         
         long pdfStartTime = System.currentTimeMillis();
         
+        // 从配置读取DPI
+        SimilarityConfig config = SimilarityConfig.getInstance();
+        int renderDpi = config.ocrRenderDpi;
+        
         // 1. 将 PDF 每页渲染为图片
         List<PdfPageRenderer.PageImage> pages = PdfPageRenderer.renderAllPages(
-            pdfFile.toPath(), 150); // 150 DPI 足够 OCR 识别
+            pdfFile.toPath(), renderDpi);
         
         long renderTime = System.currentTimeMillis() - pdfStartTime;
-        System.out.println(String.format("[OCR客户端] ✓ PDF渲染完成: %d 页，耗时 %d ms", 
-            pages.size(), renderTime));
+        System.out.println(String.format("[OCR客户端] ✓ PDF渲染完成: %d 页，耗时 %d ms (DPI=%d) (DPI=%d)", 
+            pages.size(), renderTime, renderDpi));
         
         // 2. 准备合并结果
         OcrResult mergedResult = new OcrResult();
