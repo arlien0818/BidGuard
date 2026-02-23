@@ -2,7 +2,7 @@ package com.bidguard.ui;
 
 import com.bidguard.core.*;
 import com.bidguard.config.SimilarityConfig;
-import com.bidguard.ocr.OcrDuplicateDetector;
+import com.bidguard.core.OcrDuplicateDetector;
 import com.bidguard.ocr.OcrServiceClient;
 import com.bidguard.ocr.OcrServiceFactory;
 import com.bidguard.pdf.PdfAnnotator;
@@ -35,22 +35,22 @@ public class BidCheckerGUI extends JFrame {
     private JTextArea compareResultArea;  // 文本对比结果区域
     private JTextArea annotationLogArea;  // 查重标注日志区域
     private JTextArea previewArea;
-    
+
     // 文件类型选择
     private JRadioButton txtRadio;
     private JRadioButton pdfRadio;
     private ButtonGroup fileTypeGroup;
-    
+
     // 文件数据
     private List<File> selectedFiles = new ArrayList<>();
     private Map<File, String> fileTexts = new HashMap<>();
     private File latestDetectionJsonFile;
 
- 
+
 
     private JProgressBar progressBar;
     private JTabbedPane tabbedPane;
-    
+
     // OCR识别选项卡组件
     private JLabel ocrFileLabel;
     private JButton selectOcrFileButton;
@@ -72,7 +72,7 @@ public class BidCheckerGUI extends JFrame {
 
         JPanel comparePanel = createComparePanel();
         tabbedPane.addTab("文件对比", comparePanel);
-        
+
         JPanel ocrPanel = createOcrPanel();
         tabbedPane.addTab("OCR识别", ocrPanel);
 
@@ -90,43 +90,43 @@ public class BidCheckerGUI extends JFrame {
         // === 左侧：文件选择和列表 ===
         JPanel leftPanel = new JPanel(new BorderLayout(5, 5));
         leftPanel.setPreferredSize(new Dimension(300, 0));
-        
+
         // 文件类型选择面板
         JPanel fileTypePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         fileTypePanel.setBorder(BorderFactory.createTitledBorder("输入文件类型"));
-        
+
         txtRadio = new JRadioButton("TXT");
         pdfRadio = new JRadioButton("PDF", true);  // 默认选中PDF
         fileTypeGroup = new ButtonGroup();
         fileTypeGroup.add(txtRadio);
         fileTypeGroup.add(pdfRadio);
-        
+
         // 当切换文件类型时，清空已选文件
         txtRadio.addActionListener(e -> onFileTypeChanged());
         pdfRadio.addActionListener(e -> onFileTypeChanged());
-        
+
         fileTypePanel.add(txtRadio);
         fileTypePanel.add(pdfRadio);
-        
+
         // 按钮面板
         JPanel buttonPanel = new JPanel(new GridLayout(6, 1, 5, 5));
-        
+
         selectFilesButton = new JButton("选择标书文件（≥2个）");
         selectFilesButton.addActionListener(e -> selectMultipleFiles());
-        
+
         readAllFilesButton = new JButton("读取所选文件");
         readAllFilesButton.setEnabled(false);
         readAllFilesButton.addActionListener(e -> readAllFiles());
-        
+
         compareButton = new JButton("一键对比");
         compareButton.setEnabled(false);
         compareButton.addActionListener(e -> compareFiles());
-        
+
         generateAnnotationDataButton = new JButton("生成查重报告");
         generateAnnotationDataButton.setEnabled(false);
         generateAnnotationDataButton.setToolTipText("TXT/PDF均可：生成详细的查重检测报告（JSON+TXT格式）");
         generateAnnotationDataButton.addActionListener(e -> generateDuplicateReport());
-        
+
         testPairGeneratorButton = new JButton("测试配对生成器");
         testPairGeneratorButton.setToolTipText("测试从多个文件生成所有可能的配对组合");
         testPairGeneratorButton.addActionListener(e -> testPairGenerator());
@@ -135,74 +135,74 @@ public class BidCheckerGUI extends JFrame {
         batchRunButton.setToolTipText("对所有生成的配对依次执行 OCR/查重/保存/标注（会缓存 OCR）");
         batchRunButton.setEnabled(false);
         batchRunButton.addActionListener(e -> runBatchDuplicateAndAnnotate());
-        
+
         buttonPanel.add(selectFilesButton);
         buttonPanel.add(readAllFilesButton);
         buttonPanel.add(compareButton);
         buttonPanel.add(generateAnnotationDataButton);
         buttonPanel.add(testPairGeneratorButton);
         buttonPanel.add(batchRunButton);
-        
+
         // 组合文件类型选择和按钮面板
         JPanel topPanel = new JPanel(new BorderLayout(5, 5));
         topPanel.add(fileTypePanel, BorderLayout.NORTH);
         topPanel.add(buttonPanel, BorderLayout.CENTER);
-        
+
         leftPanel.add(topPanel, BorderLayout.NORTH);
-        
+
         // 文件列表
         fileListModel = new DefaultListModel<>();
         fileList = new JList<>(fileListModel);
         fileList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         JScrollPane fileListScroll = new JScrollPane(fileList);
         fileListScroll.setBorder(BorderFactory.createTitledBorder("已选文件"));
-        
+
         leftPanel.add(fileListScroll, BorderLayout.CENTER);
 
         // === 右侧：预览区 ===
         JPanel rightPanel = new JPanel(new BorderLayout(5, 5));
-        
+
         previewArea = createPreviewTextArea();
         JScrollPane previewScroll = new JScrollPane(previewArea);
         previewScroll.setBorder(BorderFactory.createTitledBorder("文本预览"));
 
-        
+
         rightPanel.add(previewScroll, BorderLayout.CENTER);
-        
+
         // === 底部：分离的结果显示区域 ===
         JPanel bottomPanel = new JPanel(new BorderLayout(5, 5));
-        
+
         // 标注按钮
         annotatePdfButton = new JButton("生成PDF标注");
         annotatePdfButton.setEnabled(false);
         annotatePdfButton.addActionListener(e -> annotatePdfs());
         annotatePdfButton.setPreferredSize(new Dimension(150, 30));
         annotatePdfButton.setToolTipText("仅PDF：根据查重报告在PDF上标注重复位置（需先生成查重报告）");
-        
+
         JPanel annotatePanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
         annotatePanel.add(annotatePdfButton);
-        
+
         // 文本对比结果区域
         compareResultArea = new JTextArea();
         compareResultArea.setEditable(false);
         JScrollPane compareResultScroll = new JScrollPane(compareResultArea);
         compareResultScroll.setBorder(BorderFactory.createTitledBorder("文本对比结果"));
-        
+
         // 查重标注日志区域
         annotationLogArea = new JTextArea();
         annotationLogArea.setEditable(false);
         JScrollPane annotationLogScroll = new JScrollPane(annotationLogArea);
         annotationLogScroll.setBorder(BorderFactory.createTitledBorder("查重标注日志"));
-        
+
         // 使用分割面板将两个区域上下分割
         JSplitPane resultSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
             compareResultScroll, annotationLogScroll);
         resultSplitPane.setResizeWeight(0.5);
         resultSplitPane.setPreferredSize(new Dimension(0, 200));
-        
+
         bottomPanel.add(annotatePanel, BorderLayout.NORTH);
         bottomPanel.add(resultSplitPane, BorderLayout.CENTER);
-        
+
         rightPanel.add(bottomPanel, BorderLayout.SOUTH);
 
         // === 整体布局：左右分割 ===
@@ -220,49 +220,49 @@ public class BidCheckerGUI extends JFrame {
     private JPanel createOcrPanel() {
         JPanel panel = new JPanel(new BorderLayout(10, 10));
         panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-        
+
         // === 顶部：文件选择和配置信息 ===
         JPanel topPanel = new JPanel(new BorderLayout(5, 5));
-        
+
         // 文件选择面板
         JPanel filePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
         filePanel.setBorder(BorderFactory.createTitledBorder("PDF文件选择"));
-        
+
         ocrFileLabel = new JLabel("未选择文件");
         ocrFileLabel.setPreferredSize(new Dimension(400, 25));
-        
+
         selectOcrFileButton = new JButton("选择PDF文件");
         selectOcrFileButton.addActionListener(e -> selectOcrFile());
-        
+
         filePanel.add(selectOcrFileButton);
         filePanel.add(ocrFileLabel);
-        
+
         // 配置信息显示
         ocrConfigArea = new JTextArea(6, 50);
         ocrConfigArea.setEditable(false);
         ocrConfigArea.setBackground(new Color(245, 245, 245));
         JScrollPane configScroll = new JScrollPane(ocrConfigArea);
         configScroll.setBorder(BorderFactory.createTitledBorder("当前OCR配置"));
-        
+
         // 显示当前配置
         updateOcrConfigDisplay();
-        
+
         topPanel.add(filePanel, BorderLayout.NORTH);
         topPanel.add(configScroll, BorderLayout.CENTER);
-        
+
         // === 中间：操作按钮 ===
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
-        
+
         executeOcrButton = new JButton("执行OCR识别");
         executeOcrButton.setEnabled(false);
         executeOcrButton.setPreferredSize(new Dimension(150, 35));
         executeOcrButton.addActionListener(e -> executeOcr());
-        
+
         saveOcrResultButton = new JButton("保存识别结果");
         saveOcrResultButton.setEnabled(false);
         saveOcrResultButton.setPreferredSize(new Dimension(150, 35));
         saveOcrResultButton.addActionListener(e -> saveOcrResult());
-        
+
         JButton reloadConfigButton = new JButton("重新加载配置");
         reloadConfigButton.setPreferredSize(new Dimension(150, 35));
         reloadConfigButton.addActionListener(e -> {
@@ -272,11 +272,11 @@ public class BidCheckerGUI extends JFrame {
             ocrResultArea.append("配置已重新加载\n");
             ocrResultArea.append("========================================\n\n");
         });
-        
+
         buttonPanel.add(executeOcrButton);
         buttonPanel.add(saveOcrResultButton);
         buttonPanel.add(reloadConfigButton);
-        
+
         // === 底部：识别结果显示 ===
         ocrResultArea = new JTextArea();
         ocrResultArea.setEditable(false);
@@ -285,7 +285,7 @@ public class BidCheckerGUI extends JFrame {
         JScrollPane resultScroll = new JScrollPane(ocrResultArea);
         resultScroll.setBorder(BorderFactory.createTitledBorder("OCR识别结果"));
         resultScroll.setPreferredSize(new Dimension(0, 250)); // 设置首选高度，防止挤压按钮区域
-        
+
         // 初始提示
         ocrResultArea.setText("请选择一个PDF文件，然后执行OCR识别。\n\n" +
                 "功能说明：\n" +
@@ -296,16 +296,16 @@ public class BidCheckerGUI extends JFrame {
                 "提示：\n" +
                 "- 可通过修改config.properties中的ocr.render.dpi调整识别精度（默认200）\n" +
                 "- 将ocr.remove.seal.enabled设为true可在识别前去除红章（实验性功能）\n");
-        
+
         // 组合按钮和结果区到中间面板
         JPanel centerPanel = new JPanel(new BorderLayout(5, 5));
         centerPanel.add(buttonPanel, BorderLayout.NORTH);
         centerPanel.add(resultScroll, BorderLayout.CENTER);
-        
+
         // 整体布局
         panel.add(topPanel, BorderLayout.NORTH);
         panel.add(centerPanel, BorderLayout.CENTER);
-        
+
         return panel;
     }
 
@@ -342,19 +342,19 @@ public class BidCheckerGUI extends JFrame {
         fileListModel.clear();
         fileTexts.clear();
         latestDetectionJsonFile = null;
-        
+
         // 清空显示区域
         previewArea.setText("");
         compareResultArea.setText("");
         annotationLogArea.setText("");
-        
+
         // 重置按钮状态
         readAllFilesButton.setEnabled(false);
         compareButton.setEnabled(false);
         generateAnnotationDataButton.setEnabled(false);
         annotatePdfButton.setEnabled(false);
         batchRunButton.setEnabled(false);
-        
+
         // 根据模式更新批量按钮文字和提示
         boolean isTxtMode = txtRadio.isSelected();
         if (isTxtMode) {
@@ -364,7 +364,7 @@ public class BidCheckerGUI extends JFrame {
             batchRunButton.setText("批量执行查重并标注");
             batchRunButton.setToolTipText("对所有生成的配对依次执行 OCR/查重/保存/标注（会缓存 OCR）");
         }
-        
+
         // 提示用户
         if (isTxtMode) {
             annotationLogArea.append("已切换到 TXT 模式，请选择文本文件。\n");
@@ -419,11 +419,11 @@ public class BidCheckerGUI extends JFrame {
     private void selectMultipleFiles() {
         File testFilesDir = getTestFilesDirectory();
         String defaultPath = testFilesDir.exists() ? testFilesDir.getAbsolutePath() : getDefaultDirectory();
-        
+
         boolean isTxtMode = txtRadio.isSelected();
         String fileType = isTxtMode ? "TXT" : "PDF";
         String fileExt = isTxtMode ? "txt" : "pdf";
-        
+
         JFileChooser fileChooser = new JFileChooser(defaultPath);
         FileNameExtensionFilter filter = new FileNameExtensionFilter(
             fileType + " 文件 (*." + fileExt + ")", fileExt);
@@ -431,18 +431,18 @@ public class BidCheckerGUI extends JFrame {
         fileChooser.setAcceptAllFileFilterUsed(false);
         fileChooser.setMultiSelectionEnabled(true);
         fileChooser.setDialogTitle("选择标书文件（请选择至少2个" + fileType + "文件）");
-        
+
         int result = fileChooser.showOpenDialog(this);
         if (result == JFileChooser.APPROVE_OPTION) {
             File[] files = fileChooser.getSelectedFiles();
-            
+
             // 检查文件数量
             if (files.length < 2) {
                 JOptionPane.showMessageDialog(this,
                     "请至少选择2个" + fileType + "文件！\n\n"
                     + "当前只选择了 " + files.length + " 个文件\n\n"
                     + "提示：\n"
-                    + (isTxtMode ? 
+                    + (isTxtMode ?
                         "• 选择2个文件可进行对比\n" :
                         "• 选择2个文件可进行对比\n" +
                         "• 选择多个文件可测试配对生成器"),
@@ -450,7 +450,7 @@ public class BidCheckerGUI extends JFrame {
                     JOptionPane.WARNING_MESSAGE);
                 return;
             }
-            
+
             // 检查文件格式
             for (File file : files) {
                 if (!file.getName().toLowerCase().endsWith("." + fileExt)) {
@@ -462,35 +462,35 @@ public class BidCheckerGUI extends JFrame {
                     return;
                 }
             }
-            
+
             // 更新文件列表
             selectedFiles.clear();
             selectedFiles.addAll(Arrays.asList(files));
             fileTexts.clear();
-            
+
             // 更新显示
             fileListModel.clear();
             for (File file : selectedFiles) {
                 fileListModel.addElement(file.getName());
             }
-            
+
             // 清空预览区
             previewArea.setText("");
             compareResultArea.setText("");
             annotationLogArea.setText("");
-            
+
             // 更新按钮状态（TXT模式下仅禁用PDF标注功能）
             readAllFilesButton.setEnabled(files.length == 2);
             compareButton.setEnabled(false);
             generateAnnotationDataButton.setEnabled(false);
             annotatePdfButton.setEnabled(false);  // TXT模式下始终禁用
             batchRunButton.setEnabled(files.length >= 2);  // TXT和PDF都支持批量
-            
+
             LOGGER.info("已选择 " + files.length + " 个" + fileType + "文件");
             for (File file : files) {
                 LOGGER.info("  - " + file.getName());
             }
-            
+
             // 提示用户下一步操作
             if (files.length == 2) {
                 annotationLogArea.append("已选择2个文件，可以进行对比操作。\n");
@@ -510,44 +510,44 @@ public class BidCheckerGUI extends JFrame {
             }
         }
     }
-    
+
     // 功能: 读取所有选中的文件
     private void readAllFiles() {
         if (selectedFiles.isEmpty()) {
             JOptionPane.showMessageDialog(this, "请先选择文件！", "提示", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        
+
         if (selectedFiles.size() != 2) {
             JOptionPane.showMessageDialog(this, "请选择2个文件！", "提示", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        
+
         readAllFilesButton.setEnabled(false);
         progressBar.setIndeterminate(true);
         progressBar.setString("正在读取文件...");
-        
+
         // 使用SwingWorker异步读取
         SwingWorker<Void, String> worker = new SwingWorker<>() {
             @Override
             protected Void doInBackground() throws Exception {
                 fileTexts.clear();
-                
+
                 for (int i = 0; i < selectedFiles.size(); i++) {
                     File file = selectedFiles.get(i);
                     String displayName = "文件" + (i + 1);
-                    
+
                     publish("正在读取 " + displayName + ": " + file.getName() + "...");
-                    
+
                     String text = extractTextFromFile(file, displayName);
                     fileTexts.put(file, text);
-                    
+
                     publish("✓ " + displayName + " 读取完成: " + text.length() + " 字符");
                 }
-                
+
                 return null;
             }
-            
+
             @Override
             protected void process(List<String> chunks) {
                 for (String msg : chunks) {
@@ -555,13 +555,13 @@ public class BidCheckerGUI extends JFrame {
                 }
                 annotationLogArea.setCaretPosition(annotationLogArea.getDocument().getLength());
             }
-            
+
             @Override
             protected void done() {
                 try {
                     get();
                     annotationLogArea.append("\n所有文件读取完成！\n");
-                    
+
                     // 显示第一个文件的预览
                     if (!selectedFiles.isEmpty()) {
                         File firstFile = selectedFiles.get(0);
@@ -571,11 +571,11 @@ public class BidCheckerGUI extends JFrame {
                             previewArea.setCaretPosition(0);
                         }
                     }
-                    
+
                     // 更新按钮状态
                     compareButton.setEnabled(true);
                     generateAnnotationDataButton.setEnabled(true);  // TXT和PDF都支持查重报告
-                    
+
                 } catch (Exception ex) {
                     LOGGER.log(Level.SEVERE, "读取文件失败", ex);
                     annotationLogArea.append("\n读取失败: " + ex.getMessage() + "\n");
@@ -590,7 +590,7 @@ public class BidCheckerGUI extends JFrame {
                 }
             }
         };
-        
+
         worker.execute();
     }
 
@@ -671,7 +671,7 @@ public class BidCheckerGUI extends JFrame {
                 "提示", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        
+
         if (selectedFiles.size() != 2) {
             JOptionPane.showMessageDialog(this,
                 "请选择两个文件！",
@@ -694,7 +694,7 @@ public class BidCheckerGUI extends JFrame {
                 File file2 = selectedFiles.get(1);
                 String text1 = fileTexts.get(file1);
                 String text2 = fileTexts.get(file2);
-                
+
                 // 直接对比已读取的文本内容
                 return BidChecker.compareTexts(text1, text2);
             }
@@ -739,14 +739,14 @@ public class BidCheckerGUI extends JFrame {
                 "请先选择两个文件！", "提示", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        
+
         File file1 = selectedFiles.get(0);
         File file2 = selectedFiles.get(1);
-        
+
         // 判断文件类型
         boolean isTxtMode = txtRadio.isSelected();
         String fileExt = isTxtMode ? ".txt" : ".pdf";
-        
+
         // 检查文件扩展名是否匹配
         if (!file1.getName().toLowerCase().endsWith(fileExt) ||
             !file2.getName().toLowerCase().endsWith(fileExt)) {
@@ -755,14 +755,14 @@ public class BidCheckerGUI extends JFrame {
                 "提示", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        
+
         // 清空日志区域
         annotationLogArea.setText("");
-        
+
         progressBar.setIndeterminate(true);
         progressBar.setString("正在生成查重报告...");
         generateAnnotationDataButton.setEnabled(false);
-        
+
         if (isTxtMode) {
             // TXT模式：生成简化版查重报告
             generateTextDuplicateReport(file1, file2);
@@ -771,7 +771,7 @@ public class BidCheckerGUI extends JFrame {
             generatePdfDuplicateReport(file1, file2);
         }
     }
-    
+
     // 功能: 生成TXT文件的查重报告
     private void generateTextDuplicateReport(File file1, File file2) {
         SwingWorker<File, String> worker = new SwingWorker<>() {
@@ -779,23 +779,23 @@ public class BidCheckerGUI extends JFrame {
             protected File doInBackground() throws Exception {
                 LOGGER.info("开始生成TXT查重报告");
                 publish("正在读取文本文件...\n");
-                
+
                 // 获取已读取的文本内容
                 String text1 = fileTexts.get(file1);
                 String text2 = fileTexts.get(file2);
-                
+
                 if (text1 == null || text2 == null) {
                     throw new IOException("文本内容未读取，请先点击'读取所选文件'按钮");
                 }
-                
+
                 publish("文档1: " + text1.length() + " 字符\n");
                 publish("文档2: " + text2.length() + " 字符\n\n");
-                
+
                 publish("正在执行查重检测...\n");
-                
+
                 // 使用纯文本查重方法（和PDF使用相同的核心算法）
                 int minLength = SimilarityConfig.getInstance().substringMinLength;
-                OcrDuplicateDetector.DuplicateDetectionResult detection = 
+                OcrDuplicateDetector.DuplicateDetectionResult detection =
                     OcrDuplicateDetector.detectDuplicatesFromText(
                         text1,
                         text2,
@@ -803,25 +803,25 @@ public class BidCheckerGUI extends JFrame {
                         file2.getName(),
                         minLength
                     );
-                
+
                 publish("找到 " + detection.totalMatches + " 个重复片段\n");
                 publish("Jaccard相似度: " + String.format("%.2f%%", detection.jaccardScore) + "\n");
                 publish("增强相似度: " + String.format("%.2f%%", detection.enhancedSimilarityScore) + "\n\n");
-                
+
                 publish("正在保存结果文件...\n");
-                
+
                 // 保存简化版的查重报告
                 File jsonFile = OcrDuplicateDetector.saveTextDuplicateResult(
                     detection,
                     file1.getName(),
                     file2.getName()
                 );
-                
+
                 publish("查重报告已保存！\n");
-                
+
                 return jsonFile;
             }
-            
+
             @Override
             protected void process(java.util.List<String> chunks) {
                 for (String message : chunks) {
@@ -829,12 +829,12 @@ public class BidCheckerGUI extends JFrame {
                 }
                 annotationLogArea.setCaretPosition(annotationLogArea.getDocument().getLength());
             }
-            
+
             @Override
             protected void done() {
                 try {
                     File jsonFile = get();
-                    
+
                     annotationLogArea.append("\n" + "=".repeat(60) + "\n");
                     annotationLogArea.append("✓ TXT查重报告生成成功！\n");
                     annotationLogArea.append("=".repeat(60) + "\n\n");
@@ -842,9 +842,9 @@ public class BidCheckerGUI extends JFrame {
                     annotationLogArea.append("文本报告: " + jsonFile.getName().replace(".json", ".txt").replace("duplicate_detection_", "duplicate_report_") + "\n");
                     annotationLogArea.append("保存位置: " + jsonFile.getParent() + "\n\n");
                     annotationLogArea.append("注意：TXT文件查重完成，无法进行PDF标注。\n");
-                    
+
                     LOGGER.info("TXT查重报告生成完成");
-                    
+
                     JOptionPane.showMessageDialog(BidCheckerGUI.this,
                         "TXT查重报告已生成！\n\n" +
                         "文件保存在 output/ 目录下：\n" +
@@ -852,7 +852,7 @@ public class BidCheckerGUI extends JFrame {
                         "- " + jsonFile.getName().replace(".json", ".txt").replace("duplicate_detection_", "duplicate_report_") + " (可读报告)\n\n" +
                         "请查看报告文件了解详细的查重结果。",
                         "成功", JOptionPane.INFORMATION_MESSAGE);
-                        
+
                 } catch (Exception ex) {
                     LOGGER.log(Level.SEVERE, "生成TXT查重报告失败", ex);
                     annotationLogArea.append("\n✗ 生成失败: " + ex.getMessage() + "\n");
@@ -866,10 +866,10 @@ public class BidCheckerGUI extends JFrame {
                 }
             }
         };
-        
+
         worker.execute();
     }
-    
+
     // 功能: 生成PDF文件的查重报告
     private void generatePdfDuplicateReport(File file1, File file2) {
         SwingWorker<File, String> worker = new SwingWorker<>() {
@@ -877,19 +877,19 @@ public class BidCheckerGUI extends JFrame {
             protected File doInBackground() throws Exception {
                 LOGGER.info("开始生成PDF查重报告");
                 publish("正在获取OCR识别结果...\n");
-                
+
                 // 获取两个PDF的OCR结果
                 OcrServiceClient.OcrResult ocrResult1 = OcrServiceFactory.recognizePdf(file1);
                 publish("文档1 OCR完成: " + ocrResult1.textCount + " 个文字块\n");
-                
+
                 OcrServiceClient.OcrResult ocrResult2 = OcrServiceFactory.recognizePdf(file2);
                 publish("文档2 OCR完成: " + ocrResult2.textCount + " 个文字块\n");
-                
+
                 publish("\n正在执行查重检测...\n");
-                
+
                 // 执行查重检测（和TXT使用相同的核心算法）
                 int minLength = SimilarityConfig.getInstance().substringMinLength;
-                OcrDuplicateDetector.DuplicateDetectionResult detection = 
+                OcrDuplicateDetector.DuplicateDetectionResult detection =
                     OcrDuplicateDetector.detectDuplicates(
                         ocrResult1,
                         ocrResult2,
@@ -897,25 +897,25 @@ public class BidCheckerGUI extends JFrame {
                         file2.getName(),
                         minLength
                     );
-                
+
                 publish("找到 " + detection.totalMatches + " 个重复片段\n");
                 publish("Jaccard相似度: " + String.format("%.2f%%", detection.jaccardScore) + "\n");
                 publish("增强相似度: " + String.format("%.2f%%", detection.enhancedSimilarityScore) + "\n\n");
-                
+
                 publish("正在保存结果文件...\n");
-                
+
                 // 保存结果到JSON文件（含bbox信息）
                 File jsonFile = OcrDuplicateDetector.saveResultToJson(
                     detection,
                     file1.getName(),
                     file2.getName()
                 );
-                
+
                 publish("查重报告已保存！\n");
-                
+
                 return jsonFile;
             }
-            
+
             @Override
             protected void process(java.util.List<String> chunks) {
                 for (String message : chunks) {
@@ -923,15 +923,15 @@ public class BidCheckerGUI extends JFrame {
                 }
                 annotationLogArea.setCaretPosition(annotationLogArea.getDocument().getLength());
             }
-            
+
             @Override
             protected void done() {
                 try {
                     File jsonFile = get();
-                    
+
                     // 保存JSON文件引用，供标注功能使用
                     latestDetectionJsonFile = jsonFile;
-                    
+
                     annotationLogArea.append("\n" + "=".repeat(60) + "\n");
                     annotationLogArea.append("✓ PDF查重报告生成成功！\n");
                     annotationLogArea.append("=".repeat(60) + "\n\n");
@@ -939,12 +939,12 @@ public class BidCheckerGUI extends JFrame {
                     annotationLogArea.append("文本报告: " + jsonFile.getName().replace(".json", ".txt").replace("duplicate_detection_", "duplicate_report_") + "\n");
                     annotationLogArea.append("保存位置: " + jsonFile.getParent() + "\n\n");
                     annotationLogArea.append("下一步：如需在PDF上标注，请点击'生成PDF标注'按钮。\n");
-                    
+
                     LOGGER.info("PDF查重报告生成完成");
-                    
+
                     // 启用标注按钮
                     annotatePdfButton.setEnabled(true);
-                    
+
                     JOptionPane.showMessageDialog(BidCheckerGUI.this,
                         "PDF查重报告已生成！\n\n" +
                         "文件保存在 output/ 目录下：\n" +
@@ -952,7 +952,7 @@ public class BidCheckerGUI extends JFrame {
                         "- " + jsonFile.getName().replace(".json", ".txt").replace("duplicate_detection_", "duplicate_report_") + " (可读报告)\n\n" +
                         "如需在PDF上标注重复位置，请点击'生成PDF标注'按钮。",
                         "成功", JOptionPane.INFORMATION_MESSAGE);
-                        
+
                 } catch (Exception ex) {
                     LOGGER.log(Level.SEVERE, "生成PDF查重报告失败", ex);
                     annotationLogArea.append("\n✗ 生成失败: " + ex.getMessage() + "\n");
@@ -966,7 +966,7 @@ public class BidCheckerGUI extends JFrame {
                 }
             }
         };
-        
+
         worker.execute();
     }
 
@@ -978,17 +978,17 @@ public class BidCheckerGUI extends JFrame {
                 "提示", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        
+
         if (selectedFiles.size() != 2) {
             JOptionPane.showMessageDialog(this,
                 "请先选择两个文件！",
                 "错误", JOptionPane.ERROR_MESSAGE);
             return;
         }
-        
+
         File file1 = selectedFiles.get(0);
         File file2 = selectedFiles.get(1);
-        
+
         // 确认执行标注
         int confirm = JOptionPane.showConfirmDialog(this,
             "确认要在PDF上标注重复内容吗？\n\n" +
@@ -999,15 +999,15 @@ public class BidCheckerGUI extends JFrame {
             "确认标注",
             JOptionPane.YES_NO_OPTION,
             JOptionPane.QUESTION_MESSAGE);
-        
+
         if (confirm != JOptionPane.YES_OPTION) {
             return;
         }
-        
+
         progressBar.setIndeterminate(true);
         progressBar.setString("正在标注PDF...");
         annotatePdfButton.setEnabled(false);
-        
+
         // 使用SwingWorker异步处理
         SwingWorker<PdfAnnotator.AnnotationResult, String> worker = new SwingWorker<>() {
             @Override
@@ -1015,23 +1015,23 @@ public class BidCheckerGUI extends JFrame {
                 LOGGER.info("开始PDF标注");
                 publish("读取查重检测结果...\n");
                 publish("检测文件: " + latestDetectionJsonFile.getName() + "\n\n");
-                
+
                 publish("正在标注PDF文件...\n");
                 publish("文档1: " + file1.getName() + "\n");
                 publish("文档2: " + file2.getName() + "\n\n");
-                
+
                 // 执行标注
                 PdfAnnotator.AnnotationResult result = PdfAnnotator.annotatePdfs(
                     latestDetectionJsonFile,
                     file1,
                     file2
                 );
-                
+
                 publish("标注完成！\n");
-                
+
                 return result;
             }
-            
+
             @Override
             protected void process(java.util.List<String> chunks) {
                 for (String message : chunks) {
@@ -1039,12 +1039,12 @@ public class BidCheckerGUI extends JFrame {
                 }
                 annotationLogArea.setCaretPosition(annotationLogArea.getDocument().getLength());
             }
-            
+
             @Override
             protected void done() {
                 try {
                     PdfAnnotator.AnnotationResult result = get();
-                    
+
                     annotationLogArea.append("\n" + "=".repeat(60) + "\n");
                     annotationLogArea.append("✓ PDF标注完成！\n");
                     annotationLogArea.append("=".repeat(60) + "\n\n");
@@ -1056,9 +1056,9 @@ public class BidCheckerGUI extends JFrame {
                     annotationLogArea.append("  标注区域: " + result.totalAnnotations2 + " 个\n\n");
                     annotationLogArea.append("文件位置: " + result.annotatedFile1.getParent() + "\n");
                     annotationLogArea.append("=".repeat(60) + "\n");
-                    
+
                     LOGGER.info("PDF标注完成");
-                    
+
                     JOptionPane.showMessageDialog(BidCheckerGUI.this,
                         "PDF标注完成！\n\n" +
                         "标注后的文件已保存到 output/ 目录：\n\n" +
@@ -1070,17 +1070,17 @@ public class BidCheckerGUI extends JFrame {
                         "  标注区域: " + result.totalAnnotations2 + " 个\n\n" +
                         "重复内容已用红色矩形框标注。",
                         "标注完成", JOptionPane.INFORMATION_MESSAGE);
-                        
+
                 } catch (Exception ex) {
                     LOGGER.log(Level.SEVERE, "PDF标注失败", ex);
                     annotationLogArea.append("\n✗ 标注失败: " + ex.getMessage() + "\n");
-                    
+
                     // 提供更详细的错误信息
                     String errorDetail = ex.getMessage();
                     if (ex.getCause() != null) {
                         errorDetail += "\n原因: " + ex.getCause().getMessage();
                     }
-                    
+
                     JOptionPane.showMessageDialog(BidCheckerGUI.this,
                         "PDF标注失败:\n\n" + errorDetail + "\n\n" +
                         "请检查:\n" +
@@ -1095,17 +1095,17 @@ public class BidCheckerGUI extends JFrame {
                 }
             }
         };
-        
+
         worker.execute();
     }
 
     // 功能: 测试配对生成器
     private void testPairGenerator() {
         LOGGER.info("开始测试配对生成器");
-        
+
         // 清空结果区
         annotationLogArea.setText("");
-        
+
         if (selectedFiles.isEmpty()) {
             annotationLogArea.append("❌ 请先选择文件！\n\n");
             annotationLogArea.append("点击\"选择标书文件\"按钮，选择多个PDF文件（建议3-5个）。\n");
@@ -1114,7 +1114,7 @@ public class BidCheckerGUI extends JFrame {
                 "提示", JOptionPane.INFORMATION_MESSAGE);
             return;
         }
-        
+
         if (selectedFiles.size() < 2) {
             annotationLogArea.append("❌ 至少需要2个文件才能生成配对！\n\n");
             annotationLogArea.append("当前选择: " + selectedFiles.size() + " 个文件\n");
@@ -1123,11 +1123,11 @@ public class BidCheckerGUI extends JFrame {
                 "提示", JOptionPane.INFORMATION_MESSAGE);
             return;
         }
-        
+
         annotationLogArea.append("=".repeat(60) + "\n");
         annotationLogArea.append("配对生成器测试\n");
         annotationLogArea.append("=".repeat(60) + "\n\n");
-        
+
         // 显示输入文件
         annotationLogArea.append("📁 输入文件列表 (" + selectedFiles.size() + " 个):\n");
         for (int i = 0; i < selectedFiles.size(); i++) {
@@ -1135,48 +1135,48 @@ public class BidCheckerGUI extends JFrame {
             annotationLogArea.append(String.format("  [%d] %s\n", i + 1, file.getName()));
         }
         annotationLogArea.append("\n");
-        
+
         // 计算预期配对数量
         int expectedPairCount = PairGenerator.calculatePairCount(selectedFiles.size());
-        annotationLogArea.append(String.format("📊 预期生成配对数: C(%d,2) = %d\n\n", 
+        annotationLogArea.append(String.format("📊 预期生成配对数: C(%d,2) = %d\n\n",
             selectedFiles.size(), expectedPairCount));
-        
+
         // 生成配对
         LOGGER.info("调用 PairGenerator.generatePairs() 生成配对...");
         List<FilePair> pairs = PairGenerator.generatePairs(selectedFiles);
-        
+
         // 显示生成结果
         annotationLogArea.append("=".repeat(60) + "\n");
         annotationLogArea.append("✅ 配对生成结果\n");
         annotationLogArea.append("=".repeat(60) + "\n\n");
         annotationLogArea.append(String.format("实际生成配对数: %d\n\n", pairs.size()));
-        
+
         // 显示所有配对
         annotationLogArea.append("配对详情:\n");
         annotationLogArea.append("-".repeat(60) + "\n");
         for (int i = 0; i < pairs.size(); i++) {
             FilePair pair = pairs.get(i);
-            annotationLogArea.append(String.format("配对 #%-2d: %s\n", 
+            annotationLogArea.append(String.format("配对 #%-2d: %s\n",
                 i + 1, pair.toString()));
-            annotationLogArea.append(String.format("          ↳ [%s]\n", 
+            annotationLogArea.append(String.format("          ↳ [%s]\n",
                 pair.getFileA().getName()));
-            annotationLogArea.append(String.format("          ↳ [%s]\n", 
+            annotationLogArea.append(String.format("          ↳ [%s]\n",
                 pair.getFileB().getName()));
             if (i < pairs.size() - 1) {
                 annotationLogArea.append("\n");
             }
         }
         annotationLogArea.append("-".repeat(60) + "\n\n");
-        
+
         // 验证结果
         boolean testPassed = (pairs.size() == expectedPairCount);
         if (testPassed) {
             annotationLogArea.append("✅ 测试通过！配对数量正确。\n\n");
         } else {
-            annotationLogArea.append(String.format("❌ 测试失败！预期 %d 个配对，实际生成 %d 个。\n\n", 
+            annotationLogArea.append(String.format("❌ 测试失败！预期 %d 个配对，实际生成 %d 个。\n\n",
                 expectedPairCount, pairs.size()));
         }
-        
+
         // 算法说明
         annotationLogArea.append("=".repeat(60) + "\n");
         annotationLogArea.append("算法说明\n");
@@ -1191,12 +1191,12 @@ public class BidCheckerGUI extends JFrame {
         annotationLogArea.append("  • 避免重复（不会生成 A vs B 又生成 B vs A）\n");
         annotationLogArea.append("  • 避免自我配对（不会生成 A vs A）\n");
         annotationLogArea.append("  • 保证顺序（i < j）\n\n");
-        
+
         // 滚动到顶部
         annotationLogArea.setCaretPosition(0);
-        
+
         LOGGER.info("配对生成器测试完成，生成 " + pairs.size() + " 个配对");
-        
+
         // 显示弹窗
         JOptionPane.showMessageDialog(this,
             String.format("配对生成器测试完成！\n\n" +
@@ -1215,7 +1215,7 @@ public class BidCheckerGUI extends JFrame {
         }
 
         boolean isTxtMode = txtRadio.isSelected();
-        
+
         // 清空结果区并开始任务
         annotationLogArea.setText("");
         progressBar.setIndeterminate(true);
@@ -1241,46 +1241,46 @@ public class BidCheckerGUI extends JFrame {
             @Override
             protected Map<FilePair, File> doInBackground() {
                 publish("开始批量TXT查重处理...\n\n");
-                
+
                 // 生成所有配对
                 List<FilePair> pairs = PairGenerator.generatePairs(selectedFiles);
                 publish(String.format("生成 %d 个文件配对\n\n", pairs.size()));
-                
+
                 Map<FilePair, File> resultMap = new LinkedHashMap<>();
                 int minLength = SimilarityConfig.getInstance().substringMinLength;
-                
+
                 for (int i = 0; i < pairs.size(); i++) {
                     FilePair pair = pairs.get(i);
                     File fileA = pair.getFileA();
                     File fileB = pair.getFileB();
-                    
+
                     publish(String.format("=".repeat(60) + "\n"));
                     publish(String.format("处理配对 %d/%d: %s\n", i + 1, pairs.size(), pair.toString()));
                     publish(String.format("=".repeat(60) + "\n"));
-                    
+
                     try {
                         // 读取TXT文件内容
                         publish("读取文件 A: " + fileA.getName() + "...\n");
                         String textA = readTextFile(fileA);
                         publish(String.format("  文件 A: %d 字符\n", textA.length()));
-                        
+
                         publish("读取文件 B: " + fileB.getName() + "...\n");
                         String textB = readTextFile(fileB);
                         publish(String.format("  文件 B: %d 字符\n\n", textB.length()));
-                        
+
                         // 执行查重检测
                         publish("执行查重检测...\n");
-                        OcrDuplicateDetector.DuplicateDetectionResult detection = 
+                        OcrDuplicateDetector.DuplicateDetectionResult detection =
                             OcrDuplicateDetector.detectDuplicatesFromText(
                                 textA, textB,
                                 fileA.getName(), fileB.getName(),
                                 minLength
                             );
-                        
+
                         publish(String.format("  重复片段: %d 个\n", detection.totalMatches));
                         publish(String.format("  Jaccard相似度: %.2f%%\n", detection.jaccardScore));
                         publish(String.format("  增强相似度: %.2f%%\n\n", detection.enhancedSimilarityScore));
-                        
+
                         // 保存结果
                         publish("保存查重报告...\n");
                         File jsonFile = OcrDuplicateDetector.saveTextDuplicateResult(
@@ -1288,18 +1288,18 @@ public class BidCheckerGUI extends JFrame {
                             fileA.getName(),
                             fileB.getName()
                         );
-                        
+
                         publish("  JSON文件: " + jsonFile.getName() + "\n");
                         publish("  TXT报告: " + jsonFile.getName().replace(".json", ".txt").replace("duplicate_detection_", "duplicate_report_") + "\n\n");
-                        
+
                         resultMap.put(pair, jsonFile);
-                        
+
                     } catch (Exception ex) {
                         LOGGER.log(Level.SEVERE, "处理配对失败: " + pair.toString(), ex);
                         publish("  ✗ 失败: " + ex.getMessage() + "\n\n");
                     }
                 }
-                
+
                 publish(String.format("\n批量处理完成！共生成 %d 个查重报告\n", resultMap.size()));
                 return resultMap;
             }
@@ -1320,11 +1320,11 @@ public class BidCheckerGUI extends JFrame {
                     annotationLogArea.append("处理汇总\n");
                     annotationLogArea.append("=".repeat(60) + "\n");
                     for (Map.Entry<FilePair, File> e : map.entrySet()) {
-                        annotationLogArea.append(String.format("%s\n  -> %s\n", 
+                        annotationLogArea.append(String.format("%s\n  -> %s\n",
                             e.getKey().toString(), e.getValue().getName()));
                     }
                     annotationLogArea.append("=".repeat(60) + "\n");
-                    
+
                     JOptionPane.showMessageDialog(BidCheckerGUI.this,
                         String.format("批量TXT查重完成！\n\n共生成 %d 个查重报告\n\n报告保存在 output/ 目录", map.size()),
                         "完成", JOptionPane.INFORMATION_MESSAGE);
@@ -1412,7 +1412,7 @@ public class BidCheckerGUI extends JFrame {
     }
 
     // ========== OCR识别相关方法 ==========
-    
+
     // 功能: 更新OCR配置显示
     private void updateOcrConfigDisplay() {
         SimilarityConfig config = SimilarityConfig.getInstance();
@@ -1422,7 +1422,7 @@ public class BidCheckerGUI extends JFrame {
         sb.append("去红章功能: ").append(config.ocrRemoveSealEnabled ? "开启" : "关闭").append("\n");
         sb.append("图片压缩最大边长: ").append(config.ocrImageMaxDimension).append("px\n");
         sb.append("JPEG压缩质量: ").append(String.format("%.2f", config.ocrJpegQuality)).append("\n");
-        
+
         if ("aliyun".equalsIgnoreCase(config.ocrType)) {
             sb.append("\n阿里云OCR配置:\n");
             sb.append("  - API端点: ").append(config.ocrAliyunEndpoint).append("\n");
@@ -1431,59 +1431,59 @@ public class BidCheckerGUI extends JFrame {
             sb.append("\n本地EasyOCR配置:\n");
             sb.append("  - 服务地址: ").append(config.ocrLocalUrl).append("\n");
         }
-        
+
         ocrConfigArea.setText(sb.toString());
     }
-    
+
     // 功能: 选择OCR识别的PDF文件
     private void selectOcrFile() {
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setCurrentDirectory(getTestFilesDirectory());
         fileChooser.setFileFilter(new FileNameExtensionFilter("PDF文件", "pdf"));
         fileChooser.setDialogTitle("选择要进行OCR识别的PDF文件");
-        
+
         int result = fileChooser.showOpenDialog(this);
         if (result == JFileChooser.APPROVE_OPTION) {
             selectedOcrFile = fileChooser.getSelectedFile();
             ocrFileLabel.setText(selectedOcrFile.getName());
             executeOcrButton.setEnabled(true);
-            
+
             ocrResultArea.append("\n========================================\n");
             ocrResultArea.append("已选择文件: " + selectedOcrFile.getName() + "\n");
             ocrResultArea.append("文件大小: " + String.format("%.2f MB", selectedOcrFile.length() / (1024.0 * 1024.0)) + "\n");
             ocrResultArea.append("========================================\n\n");
         }
     }
-    
+
     // 功能: 执行OCR识别
     private void executeOcr() {
         if (selectedOcrFile == null || !selectedOcrFile.exists()) {
             JOptionPane.showMessageDialog(this, "请先选择一个PDF文件", "提示", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        
+
         executeOcrButton.setEnabled(false);
         saveOcrResultButton.setEnabled(false);
         progressBar.setString("正在执行OCR识别...");
         progressBar.setIndeterminate(true);
-        
+
         SwingWorker<OcrServiceClient.OcrResult, String> worker = new SwingWorker<>() {
             @Override
             protected OcrServiceClient.OcrResult doInBackground() throws Exception {
                 publish("开始OCR识别: " + selectedOcrFile.getName() + "\n");
-                publish("识别配置: DPI=" + SimilarityConfig.getInstance().ocrRenderDpi + 
+                publish("识别配置: DPI=" + SimilarityConfig.getInstance().ocrRenderDpi +
                        ", 去红章=" + (SimilarityConfig.getInstance().ocrRemoveSealEnabled ? "是" : "否") + "\n");
                 publish("请稍候，正在处理...\n\n");
-                
+
                 long startTime = System.currentTimeMillis();
                 OcrServiceClient.OcrResult result = OcrServiceFactory.recognizePdf(selectedOcrFile);
                 long elapsed = System.currentTimeMillis() - startTime;
-                
+
                 publish("\n识别完成！耗时: " + (elapsed / 1000.0) + " 秒\n");
-                
+
                 return result;
             }
-            
+
             @Override
             protected void process(List<String> chunks) {
                 for (String msg : chunks) {
@@ -1491,18 +1491,18 @@ public class BidCheckerGUI extends JFrame {
                 }
                 ocrResultArea.setCaretPosition(ocrResultArea.getDocument().getLength());
             }
-            
+
             @Override
             protected void done() {
                 try {
                     OcrServiceClient.OcrResult result = get();
-                    
+
                     // 计算平均置信度（在外层作用域定义）
                     double avgConfidence = result.texts.stream()
                         .mapToDouble(t -> t.confidence)
                         .average()
                         .orElse(0.0);
-                    
+
                     ocrResultArea.append("\n" + "=".repeat(60) + "\n");
                     ocrResultArea.append("识别结果统计\n");
                     ocrResultArea.append("=".repeat(60) + "\n");
@@ -1511,24 +1511,24 @@ public class BidCheckerGUI extends JFrame {
                     ocrResultArea.append("总页数: " + result.pageCount + "\n");
                     ocrResultArea.append("文字块数量: " + result.texts.size() + "\n");
                     ocrResultArea.append("总字符数: " + result.fullText.length() + "\n");
-                    
+
                     if (!result.success) {
                         ocrResultArea.append("错误信息: " + result.error + "\n");
                     } else {
                         ocrResultArea.append("平均置信度: " + String.format("%.2f%%", avgConfidence * 100) + "\n");
                     }
                     ocrResultArea.append("=".repeat(60) + "\n\n");
-                    
+
                     if (result.success && result.hasText()) {
                         ocrResultArea.append("识别文本内容（前500字符预览）:\n");
                         ocrResultArea.append("-".repeat(60) + "\n");
-                        String preview = result.fullText.length() > 500 ? 
+                        String preview = result.fullText.length() > 500 ?
                             result.fullText.substring(0, 500) + "..." : result.fullText;
                         ocrResultArea.append(preview + "\n");
                         ocrResultArea.append("-".repeat(60) + "\n\n");
-                        
+
                         saveOcrResultButton.setEnabled(true);
-                        
+
                         JOptionPane.showMessageDialog(BidCheckerGUI.this,
                             String.format("OCR识别成功！\n\n总字符数: %d\n文字块数: %d\n平均置信度: %.2f%%",
                                 result.fullText.length(), result.texts.size(), avgConfidence * 100),
@@ -1538,7 +1538,7 @@ public class BidCheckerGUI extends JFrame {
                             "OCR识别失败: " + result.error,
                             "错误", JOptionPane.ERROR_MESSAGE);
                     }
-                    
+
                 } catch (Exception ex) {
                     LOGGER.log(Level.SEVERE, "OCR识别异常", ex);
                     ocrResultArea.append("\n[错误] OCR识别异常: " + ex.getMessage() + "\n");
@@ -1552,22 +1552,22 @@ public class BidCheckerGUI extends JFrame {
                 }
             }
         };
-        
+
         worker.execute();
     }
-    
+
     // 功能: 保存OCR识别结果
     private void saveOcrResult() {
         if (selectedOcrFile == null) {
             return;
         }
-        
+
         try {
             // 查找缓存的OCR结果文件
             File outputDir = new File("output");
             String baseName = selectedOcrFile.getName().replaceAll("(?i)\\.pdf$", "");
             File cacheFile = new File(outputDir, baseName + "_ocr_cache.json");
-            
+
             if (cacheFile.exists()) {
                 // 打开文件所在目录
                 if (Desktop.isDesktopSupported()) {
@@ -1576,18 +1576,18 @@ public class BidCheckerGUI extends JFrame {
                         desktop.open(outputDir);
                     }
                 }
-                
+
                 JOptionPane.showMessageDialog(this,
                     "OCR识别结果已缓存到:\n" + cacheFile.getAbsolutePath() + "\n\n已打开output目录",
                     "保存成功", JOptionPane.INFORMATION_MESSAGE);
-                
+
                 ocrResultArea.append("\n[提示] 识别结果已保存到: " + cacheFile.getName() + "\n");
             } else {
                 JOptionPane.showMessageDialog(this,
                     "未找到OCR缓存文件，请先执行OCR识别",
                     "提示", JOptionPane.WARNING_MESSAGE);
             }
-            
+
         } catch (Exception ex) {
             LOGGER.log(Level.WARNING, "打开输出目录失败", ex);
             JOptionPane.showMessageDialog(this,

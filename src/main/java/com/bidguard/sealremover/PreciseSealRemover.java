@@ -1,4 +1,4 @@
-package com.bidguard;
+package com.bidguard.sealremover;
 
 import java.awt.*;
 import java.awt.image.BufferedImage;
