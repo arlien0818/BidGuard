@@ -27,6 +27,8 @@ public class RedChannelSealRemover {
 
         BufferedImage result = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
         int processed = 0;
+        // redness分布统计,用于分析印章颜色特征,先不要删除，后续版本可根据分布调整算法参数
+        // java.util.Map<Integer, Integer> rednessCount = new java.util.HashMap<>();
 
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
@@ -73,6 +75,12 @@ public class RedChannelSealRemover {
 
         System.out.println("[RedChannelSealRemover4] 处理红色像素: " + processed
                 + " (" + String.format("%.2f%%", processed * 100.0 / (w * h)) + ")");
+        // 打印redness分布
+        // System.out.println("[RedChannelSealRemover] redness分布：");
+        // rednessCount.entrySet().stream()
+        // .sorted(java.util.Map.Entry.comparingByKey())
+        // .forEach(e -> System.out.println(" redness=" + e.getKey() + " : " +
+        // e.getValue() + "个"));
         return result;
     }
 }
