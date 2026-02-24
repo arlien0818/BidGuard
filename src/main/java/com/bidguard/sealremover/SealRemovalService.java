@@ -54,7 +54,8 @@ public class SealRemovalService {
      * </ul>
      */
     public enum Algorithm {
-        DOCUMENT("HSV形态学（推荐扫描件）"),
+        LAB("LAB色度压制（保留文字，★推荐）"),
+        DOCUMENT("HSV形态学"),
         PRECISE("精确定位去除"),
         SIMPLE("简单红色像素替换（最快）");
 
@@ -239,6 +240,8 @@ public class SealRemovalService {
 
     private static BufferedImage applyAlgorithm(BufferedImage image, Algorithm algo) {
         switch (algo) {
+            case LAB:
+                return LabSealRemover.removeSeal(image);
             case DOCUMENT:
                 return DocumentSealRemover.removeSeal(image);
             case PRECISE:

@@ -1644,7 +1644,7 @@ public class BidCheckerGUI extends JFrame {
         JPanel algoPanel = new JPanel(new BorderLayout(5, 5));
         algoPanel.setBorder(BorderFactory.createTitledBorder("去章算法"));
         sealAlgorithmCombo = new JComboBox<>(SealRemovalService.Algorithm.values());
-        sealAlgorithmCombo.setSelectedItem(SealRemovalService.Algorithm.DOCUMENT);
+        sealAlgorithmCombo.setSelectedItem(SealRemovalService.Algorithm.LAB);
         algoPanel.add(sealAlgorithmCombo, BorderLayout.CENTER);
 
         JTextArea algoDesc = new JTextArea(
