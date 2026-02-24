@@ -1,359 +1,248 @@
-package com.bidguard.sealremover;
+﻿package com.bidguard.sealremover;
 
 import java.awt.image.BufferedImage;
 
 /**
- * 扫描文档红章去除器 - 基于HSV色彩空间和形态学处理
+ * 扫描文档红章去除器 - 基于HSV色彩空间检测 + 邻域均值填充
  *
- * 核心思路：
- * 1. RGB转HSV，用色相范围+饱和度提取红色掩膜（允许颜色漂移）
- * 2. 形态学膨胀+闭运算，连接断裂的圆环和文字
- * 3. 基于掩膜保持亮度结构，仅削弱红色通道
+ * <p>核心思路：
+ * <ol>
+ *   <li>RGB->HSV，用宽泛的色相+饱和度范围提取红/粉红色掩膜（覆盖 #BF476D 等偏粉红的印章色）</li>
+ *   <li>形态学膨胀，将掩膜边缘扩大，确保边缘残留也被处理</li>
+ *   <li>对掩膜区域逐像素取周围非红色邻居的均值颜色进行填充</li>
+ * </ol>
+ *
+ * <p>可被 {@link PreciseSealRemover} 和 SimpleSealRemover 复用的关键方法：
+ * {@link #isRedSealColor(int)}  判断单个像素是否属于红色印章色。
  */
 public class DocumentSealRemover {
 
-    // 红色色相范围（HSV中红色在0°和360°附近）
-    private static final float HUE_RED_LOW1 = 0f;
-    private static final float HUE_RED_HIGH1 = 25f;   // 0-25度
-    private static final float HUE_RED_LOW2 = 335f;   // 335-360度
-    private static final float HUE_RED_HIGH2 = 360f;
+    /* ====== 红色检测参数（HSV） ====== */
 
-    // 饱和度和亮度阈值
-    private static final float MIN_SATURATION = 0.25f;  // 最小饱和度（允许较淡的红色）
-    private static final float MIN_VALUE = 0.20f;       // 最小亮度
+    /** 色相范围1: 0-30 度（橙红 -> 红） */
+    private static final float HUE_LOW1 = 0f;
+    private static final float HUE_HIGH1 = 30f;
 
-    // 形态学操作参数
-    private static final int DILATE_RADIUS = 2;    // 膨胀半径
-    private static final int CLOSE_RADIUS = 5;     // 闭运算半径
+    /** 色相范围2: 300-360 度（紫红 -> 红，覆盖 #BF476D ~= 341 度） */
+    private static final float HUE_LOW2 = 300f;
+    private static final float HUE_HIGH2 = 360f;
+
+    /** 最低饱和度（扫描件背景偏灰，需要放宽） */
+    private static final float MIN_SATURATION = 0.15f;
+
+    /** 最低亮度 */
+    private static final float MIN_VALUE = 0.18f;
+
+    /* ====== 形态学 / 填充参数 ====== */
+
+    /** 膨胀半径（像素），用于扩大掩膜边缘 */
+    private static final int DILATE_RADIUS = 2;
+
+    /** 邻域填充搜索半径 */
+    private static final int FILL_SEARCH_RADIUS = 5;
+
+    // ------------------------------------------------------------------
+    //  公共 API
+    // ------------------------------------------------------------------
 
     /**
-     * 主方法：去除扫描文档中的红色印章
+     * 去除图像中的红色印章。
+     *
+     * @param image 输入图像（扫描件渲染的 BufferedImage）
+     * @return 去章后的图像；如果未检测到红色区域则返回原图
      */
     public static BufferedImage removeSeal(BufferedImage image) {
         if (image == null) {
-            System.err.println("[ERROR] 输入图像为空");
+            System.err.println("[DocumentSealRemover] 输入图像为空");
             return null;
         }
 
-        int width = image.getWidth();
-        int height = image.getHeight();
+        int w = image.getWidth();
+        int h = image.getHeight();
+        System.out.println("===== [DocumentSealRemover] 开始处理 =====");
+        System.out.println("  图像尺寸: " + w + "x" + h);
 
-        System.out.println("========================================");
-        System.out.println("[DocumentSealRemover] 开始处理");
-        System.out.println("图像尺寸: " + width + "x" + height);
-        System.out.println("========================================");
-
-        // 步骤1: 创建红色掩膜（基于HSV色彩空间）
-        System.out.println("[步骤1] 基于HSV创建红色掩膜...");
-        boolean[][] redMask = createRedMaskHSV(image);
-        int initialRedPixels = countTrue(redMask);
-        System.out.println("  初始红色像素: " + initialRedPixels);
-
-        if (initialRedPixels == 0) {
-            System.out.println("[警告] 未检测到红色区域，返回原图");
+        // 1. 创建红色掩膜
+        boolean[][] mask = createRedMask(image);
+        int initial = countTrue(mask, w, h);
+        System.out.println("  初始红色像素: " + initial);
+        if (initial == 0) {
+            System.out.println("  未检测到红色区域，返回原图");
             return image;
         }
 
-        // 步骤2: 形态学处理 - 膨胀+闭运算
-        System.out.println("[步骤2] 形态学处理（膨胀+闭运算）...");
-        boolean[][] dilatedMask = dilate(redMask, width, height, DILATE_RADIUS);
-        boolean[][] closedMask = morphologicalClose(dilatedMask, width, height, CLOSE_RADIUS);
-        int finalMaskPixels = countTrue(closedMask);
-        System.out.println("  处理后掩膜像素: " + finalMaskPixels);
+        // 2. 膨胀
+        boolean[][] dilated = dilate(mask, w, h, DILATE_RADIUS);
+        System.out.println("  膨胀后像素: " + countTrue(dilated, w, h));
 
-        // 步骤3: 基于掩膜去除印章（保持亮度结构）
-        System.out.println("[步骤3] 去除印章（保持亮度结构）...");
-        BufferedImage result = removeSealPreservingStructure(image, closedMask);
-
-        System.out.println("========================================");
-        System.out.println("[完成] 印章去除完成");
-        System.out.println("========================================");
-
+        // 3. 邻域均值填充
+        BufferedImage result = fillWithNeighborAverage(image, dilated);
+        System.out.println("===== [DocumentSealRemover] 处理完成 =====");
         return result;
     }
 
     /**
-     * 基于HSV色彩空间创建红色掩膜
-     */
-    private static boolean[][] createRedMaskHSV(BufferedImage image) {
-        int width = image.getWidth();
-        int height = image.getHeight();
-        boolean[][] mask = new boolean[width][height];
-
-        float[] hsv = new float[3];
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int rgb = image.getRGB(x, y);
-                int r = (rgb >> 16) & 0xFF;
-                int g = (rgb >> 8) & 0xFF;
-                int b = rgb & 0xFF;
-
-                // RGB转HSV
-                rgbToHsv(r, g, b, hsv);
-                float hue = hsv[0];         // 0-360
-                float saturation = hsv[1];  // 0-1
-                float value = hsv[2];       // 0-1
-
-                // 判断是否为红色区域
-                boolean isRedHue = (hue >= HUE_RED_LOW1 && hue <= HUE_RED_HIGH1) ||
-                                   (hue >= HUE_RED_LOW2 && hue <= HUE_RED_HIGH2);
-                boolean hasSaturation = saturation >= MIN_SATURATION;
-                boolean hasValue = value >= MIN_VALUE;
-
-                mask[x][y] = isRedHue && hasSaturation && hasValue;
-            }
-        }
-
-        return mask;
-    }
-
-    /**
-     * RGB转HSV
-     */
-    private static void rgbToHsv(int r, int g, int b, float[] hsv) {
-        float rf = r / 255f;
-        float gf = g / 255f;
-        float bf = b / 255f;
-
-        float max = Math.max(rf, Math.max(gf, bf));
-        float min = Math.min(rf, Math.min(gf, bf));
-        float delta = max - min;
-
-        // Value
-        hsv[2] = max;
-
-        // Saturation
-        if (max == 0) {
-            hsv[1] = 0;
-        } else {
-            hsv[1] = delta / max;
-        }
-
-        // Hue
-        if (delta == 0) {
-            hsv[0] = 0;
-        } else if (max == rf) {
-            hsv[0] = 60 * (((gf - bf) / delta) % 6);
-        } else if (max == gf) {
-            hsv[0] = 60 * (((bf - rf) / delta) + 2);
-        } else {
-            hsv[0] = 60 * (((rf - gf) / delta) + 4);
-        }
-
-        if (hsv[0] < 0) {
-            hsv[0] += 360;
-        }
-    }
-
-    /**
-     * 形态学膨胀
-     */
-    private static boolean[][] dilate(boolean[][] mask, int width, int height, int radius) {
-        boolean[][] result = new boolean[width][height];
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                if (mask[x][y]) {
-                    // 膨胀：将周围像素也标记为true
-                    for (int dy = -radius; dy <= radius; dy++) {
-                        for (int dx = -radius; dx <= radius; dx++) {
-                            int nx = x + dx;
-                            int ny = y + dy;
-                            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-                                // 使用圆形结构元素
-                                if (dx * dx + dy * dy <= radius * radius) {
-                                    result[nx][ny] = true;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
-
-    /**
-     * 形态学腐蚀
-     */
-    private static boolean[][] erode(boolean[][] mask, int width, int height, int radius) {
-        boolean[][] result = new boolean[width][height];
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                if (mask[x][y]) {
-                    boolean allNeighbors = true;
-
-                    // 检查圆形邻域内是否全为true
-                    outer:
-                    for (int dy = -radius; dy <= radius && allNeighbors; dy++) {
-                        for (int dx = -radius; dx <= radius; dx++) {
-                            if (dx * dx + dy * dy <= radius * radius) {
-                                int nx = x + dx;
-                                int ny = y + dy;
-                                if (nx < 0 || nx >= width || ny < 0 || ny >= height || !mask[nx][ny]) {
-                                    allNeighbors = false;
-                                    break outer;
-                                }
-                            }
-                        }
-                    }
-
-                    result[x][y] = allNeighbors;
-                }
-            }
-        }
-
-        return result;
-    }
-
-    /**
-     * 形态学闭运算（先膨胀后腐蚀）- 连接断裂区域
-     */
-    private static boolean[][] morphologicalClose(boolean[][] mask, int width, int height, int radius) {
-        boolean[][] dilated = dilate(mask, width, height, radius);
-        return erode(dilated, width, height, radius);
-    }
-
-    /**
-     * 去除印章同时保持亮度结构
+     * 判断一个像素是否属于"红色印章色"。
+     * <p>公开供 {@link PreciseSealRemover} 和 SimpleSealRemover 复用。
      *
-     * 方法：在掩膜区域内，保持原始亮度，但将颜色转为灰度
-     * 这样可以保留文字的边缘和结构，同时去除红色
+     * @param rgb 32-bit ARGB / RGB 值（仅低 24 位有效）
+     * @return true = 该像素被视为红色印章像素
      */
-    private static BufferedImage removeSealPreservingStructure(BufferedImage image, boolean[][] mask) {
-        int width = image.getWidth();
-        int height = image.getHeight();
-
-        BufferedImage result = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-
-        // 先计算掩膜区域周围的背景亮度
-        int bgBrightness = estimateBackgroundBrightness(image, mask);
-        System.out.println("  估算背景亮度: " + bgBrightness);
-
-        int processedPixels = 0;
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int rgb = image.getRGB(x, y);
-
-                if (mask[x][y]) {
-                    // 在掩膜区域内：去除红色，保持亮度结构
-                    int newRgb = removeRedPreserveLuminance(rgb, bgBrightness);
-                    result.setRGB(x, y, newRgb);
-                    processedPixels++;
-                } else {
-                    // 掩膜外：保持原样
-                    result.setRGB(x, y, rgb);
-                }
-            }
-        }
-
-        System.out.println("  处理像素数: " + processedPixels);
-
-        return result;
-    }
-
-    /**
-     * 估算掩膜区域周围的背景亮度
-     */
-    private static int estimateBackgroundBrightness(BufferedImage image, boolean[][] mask) {
-        int width = image.getWidth();
-        int height = image.getHeight();
-
-        long totalBrightness = 0;
-        int count = 0;
-
-        // 找掩膜边缘附近的非红色像素
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                if (!mask[x][y]) {
-                    // 检查是否在掩膜边缘附近
-                    boolean nearMask = false;
-                    for (int dy = -3; dy <= 3 && !nearMask; dy++) {
-                        for (int dx = -3; dx <= 3; dx++) {
-                            int nx = x + dx;
-                            int ny = y + dy;
-                            if (nx >= 0 && nx < width && ny >= 0 && ny < height && mask[nx][ny]) {
-                                nearMask = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (nearMask) {
-                        int rgb = image.getRGB(x, y);
-                        int r = (rgb >> 16) & 0xFF;
-                        int g = (rgb >> 8) & 0xFF;
-                        int b = rgb & 0xFF;
-                        int brightness = (int) (0.299 * r + 0.587 * g + 0.114 * b);
-                        totalBrightness += brightness;
-                        count++;
-                    }
-                }
-            }
-        }
-
-        if (count == 0) {
-            return 250; // 默认接近白色
-        }
-
-        return (int) (totalBrightness / count);
-    }
-
-    /**
-     * 去除红色但保持亮度结构
-     *
-     * 策略：
-     * 1. 计算原始像素的亮度
-     * 2. 将红色通道的影响降低，向背景亮度靠拢
-     * 3. 保持亮度差异以保留结构（如文字边缘）
-     */
-    private static int removeRedPreserveLuminance(int rgb, int bgBrightness) {
+    public static boolean isRedSealColor(int rgb) {
         int r = (rgb >> 16) & 0xFF;
         int g = (rgb >> 8) & 0xFF;
         int b = rgb & 0xFF;
 
-        // 计算原始亮度
-        float originalLuminance = 0.299f * r + 0.587f * g + 0.114f * b;
+        float[] hsv = rgbToHsv(r, g, b);
+        float hue = hsv[0]; // 0-360
+        float sat = hsv[1]; // 0-1
+        float val = hsv[2]; // 0-1
 
-        // 计算红色对亮度的额外贡献
-        // 如果去掉红色，亮度会下降多少
-        float nonRedLuminance = 0.587f * g + 0.114f * b;
+        if (sat < MIN_SATURATION || val < MIN_VALUE) return false;
 
-        // 计算亮度比例（保持结构）
-        float luminanceRatio = originalLuminance / 255f;
+        // 红色需要 R > G 且 R > B（排除绿色/蓝色区域被错误捕获）
+        if (r <= g || r <= b) return false;
 
-        // 新的亮度：向背景亮度靠拢，但保持一定的结构
-        // 亮度越低（如文字笔画处）保持越暗，亮度越高越接近背景
-        float targetLuminance;
+        return (hue >= HUE_LOW1 && hue <= HUE_HIGH1)
+            || (hue >= HUE_LOW2 && hue <= HUE_HIGH2);
+    }
 
-        if (originalLuminance < bgBrightness * 0.7f) {
-            // 较暗区域（可能是文字）：保持较暗但去除红色
-            targetLuminance = originalLuminance * 0.9f + nonRedLuminance * 0.1f;
-        } else {
-            // 较亮区域（印章的非文字部分）：直接用背景色
-            targetLuminance = bgBrightness * 0.95f + originalLuminance * 0.05f;
+    // ------------------------------------------------------------------
+    //  内部方法
+    // ------------------------------------------------------------------
+
+    private static boolean[][] createRedMask(BufferedImage image) {
+        int w = image.getWidth();
+        int h = image.getHeight();
+        boolean[][] mask = new boolean[w][h];
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                mask[x][y] = isRedSealColor(image.getRGB(x, y));
+            }
         }
+        return mask;
+    }
 
-        // 限制范围
-        int newGray = Math.min(255, Math.max(0, (int) targetLuminance));
-
-        return (newGray << 16) | (newGray << 8) | newGray;
+    /** 形态学膨胀（圆形结构元素） */
+    private static boolean[][] dilate(boolean[][] mask, int w, int h, int radius) {
+        boolean[][] result = new boolean[w][h];
+        int r2 = radius * radius;
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                if (!mask[x][y]) continue;
+                for (int dy = -radius; dy <= radius; dy++) {
+                    for (int dx = -radius; dx <= radius; dx++) {
+                        if (dx * dx + dy * dy > r2) continue;
+                        int nx = x + dx, ny = y + dy;
+                        if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+                            result[nx][ny] = true;
+                        }
+                    }
+                }
+            }
+        }
+        return result;
     }
 
     /**
-     * 统计掩膜中true的数量
+     * 对掩膜内的像素用邻域非红色像素的均值颜色替换。
+     * 如果周围全是红色，则使用更大范围或回退到估算的背景色。
      */
-    private static int countTrue(boolean[][] mask) {
-        int count = 0;
-        for (boolean[] row : mask) {
-            for (boolean val : row) {
-                if (val) count++;
+    private static BufferedImage fillWithNeighborAverage(BufferedImage image, boolean[][] mask) {
+        int w = image.getWidth();
+        int h = image.getHeight();
+        BufferedImage result = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+
+        // 先估算全局背景色（取四角非红色像素均值）
+        int fallbackBg = estimateGlobalBackground(image);
+        int processed = 0;
+
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                if (!mask[x][y]) {
+                    result.setRGB(x, y, image.getRGB(x, y));
+                    continue;
+                }
+                // 搜索周围非红色像素的平均色
+                long sumR = 0, sumG = 0, sumB = 0;
+                int cnt = 0;
+                int sr = FILL_SEARCH_RADIUS;
+                for (int dy = -sr; dy <= sr; dy++) {
+                    for (int dx = -sr; dx <= sr; dx++) {
+                        int nx = x + dx, ny = y + dy;
+                        if (nx >= 0 && nx < w && ny >= 0 && ny < h && !mask[nx][ny]) {
+                            int c = image.getRGB(nx, ny);
+                            sumR += (c >> 16) & 0xFF;
+                            sumG += (c >> 8) & 0xFF;
+                            sumB += c & 0xFF;
+                            cnt++;
+                        }
+                    }
+                }
+                int fill;
+                if (cnt > 0) {
+                    int avgR = (int) (sumR / cnt);
+                    int avgG = (int) (sumG / cnt);
+                    int avgB = (int) (sumB / cnt);
+                    fill = (avgR << 16) | (avgG << 8) | avgB;
+                } else {
+                    fill = fallbackBg;
+                }
+                result.setRGB(x, y, fill);
+                processed++;
             }
         }
+        System.out.println("  替换像素数: " + processed);
+        return result;
+    }
+
+    /** 估算全局背景色：取四角各 20x20 区域的非红色像素均值 */
+    private static int estimateGlobalBackground(BufferedImage image) {
+        int w = image.getWidth();
+        int h = image.getHeight();
+        int size = Math.min(20, Math.min(w, h));
+        long sumR = 0, sumG = 0, sumB = 0;
+        int cnt = 0;
+        int[][] corners = {{0, 0}, {w - size, 0}, {0, h - size}, {w - size, h - size}};
+        for (int[] c : corners) {
+            for (int y = c[1]; y < c[1] + size && y < h; y++) {
+                for (int x = c[0]; x < c[0] + size && x < w; x++) {
+                    int rgb = image.getRGB(x, y);
+                    if (!isRedSealColor(rgb)) {
+                        sumR += (rgb >> 16) & 0xFF;
+                        sumG += (rgb >> 8) & 0xFF;
+                        sumB += rgb & 0xFF;
+                        cnt++;
+                    }
+                }
+            }
+        }
+        if (cnt == 0) return 0xF0F0F0;
+        return ((int) (sumR / cnt) << 16) | ((int) (sumG / cnt) << 8) | (int) (sumB / cnt);
+    }
+
+    /** RGB -> HSV (H: 0-360, S: 0-1, V: 0-1) */
+    private static float[] rgbToHsv(int r, int g, int b) {
+        float rf = r / 255f, gf = g / 255f, bf = b / 255f;
+        float max = Math.max(rf, Math.max(gf, bf));
+        float min = Math.min(rf, Math.min(gf, bf));
+        float delta = max - min;
+        float hue = 0, sat, val = max;
+        sat = (max == 0) ? 0 : delta / max;
+        if (delta != 0) {
+            if (max == rf) hue = 60 * (((gf - bf) / delta) % 6);
+            else if (max == gf) hue = 60 * (((bf - rf) / delta) + 2);
+            else hue = 60 * (((rf - gf) / delta) + 4);
+            if (hue < 0) hue += 360;
+        }
+        return new float[]{hue, sat, val};
+    }
+
+    private static int countTrue(boolean[][] mask, int w, int h) {
+        int count = 0;
+        for (int x = 0; x < w; x++)
+            for (int y = 0; y < h; y++)
+                if (mask[x][y]) count++;
         return count;
     }
 }
