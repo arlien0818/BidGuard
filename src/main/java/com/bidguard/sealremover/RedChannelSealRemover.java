@@ -23,7 +23,7 @@ public class RedChannelSealRemover {
     public static BufferedImage removeSeal(BufferedImage image) {
         if (image == null) return null;
         int w = image.getWidth(), h = image.getHeight();
-        System.out.println("[RedChannelSealRemover] " + w + "x" + h);
+        System.out.println("[RedChannelSealRemover5] " + w + "x" + h);
 
         BufferedImage result = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
         int processed = 0;
@@ -31,23 +31,47 @@ public class RedChannelSealRemover {
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
                 int rgb = image.getRGB(x, y);
+
                 if (DocumentSealRemover.isRedSealColor(rgb)) {
-                    // 红章像素：用 min(G, B) 还原底层亮度（保留文字，去除纯红）
-                    int g = (rgb >> 8) & 0xFF;
-                    int b =  rgb       & 0xFF;
-                    int underlying = Math.min(g, b);
-                    // 向白色方向略微拉伸，使章痕更淡（可选，系数 1.15）
-                    underlying = Math.min(255, (int)(underlying * 1.15));
-                    int gray = (underlying << 16) | (underlying << 8) | underlying;
-                    result.setRGB(x, y, gray);
+                //把红色压回基准
+                //降低颜色饱和度（防止变暗色块）
+                //再整体提亮
+                    int r = (rgb >> 16) & 0xFF;
+                    int g = (rgb >> 8)  & 0xFF;
+                    int b =  rgb        & 0xFF;
+
+                    // ===== 1. 计算红色强度 =====
+                    int base = Math.max(g, b);
+                    int redness = r - base;
+
+                    if (redness > 0) {
+
+                        // ===== 2. 强力削弱红通道 =====
+                        r = base;
+
+                        // ===== 3. 去饱和（往灰色方向压）=====
+                        int avg = (r + g + b) / 3;
+                        g = (g + avg) / 2;
+                        b = (b + avg) / 2;              
+    
+                        // ===== 4. 整体提亮（核心）=====
+                        int lift = redness * 2;   // 可以改成 *3 如果还不够
+                        r = Math.min(255, r + lift);  
+                        g = Math.min(255, g + lift);    
+                        b = Math.min(255, b + lift);
+                    }
+
+                    int newRGB = (r << 16) | (g << 8) | b;
+                    result.setRGB(x, y, newRGB);
                     processed++;
+
                 } else {
                     result.setRGB(x, y, rgb);
                 }
             }
         }
 
-        System.out.println("[RedChannelSealRemover] 处理红色像素: " + processed
+        System.out.println("[RedChannelSealRemover4] 处理红色像素: " + processed
                 + " (" + String.format("%.2f%%", processed * 100.0 / (w * h)) + ")");
         return result;
     }
