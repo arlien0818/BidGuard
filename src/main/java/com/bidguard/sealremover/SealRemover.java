@@ -81,15 +81,15 @@ public class SealRemover {
         for (int y = 0; y < image.getHeight(); y++) {
             for (int x = 0; x < image.getWidth(); x++) {
                 int rgb = image.getRGB(x, y);
-                
                 if (isRedSealPixel(rgb)) {
-                    // 检查周围像素，确认这是印章的一部分
-                    if (isPartOfSeal(image, x, y)) {
-                        // 使用智能填充替换红色像素
-                        int replacementColor = getIntelligentReplacement(image, x, y);
-                        result.setRGB(x, y, replacementColor);
-                        removedPixels++;
-                    }
+                    int r = (rgb >> 16) & 0xFF;
+                    int g = (rgb >> 8) & 0xFF;
+                    int b = rgb & 0xFF;
+                    // 用G、B估计真实灰度
+                    int gray = (g + b) / 2;
+                    Color newColor = new Color(gray, gray, gray);
+                    result.setRGB(x, y, newColor.getRGB());
+                    removedPixels++;
                 }
             }
         }

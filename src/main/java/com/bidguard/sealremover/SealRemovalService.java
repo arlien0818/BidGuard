@@ -54,8 +54,9 @@ public class SealRemovalService {
      * </ul>
      */
     public enum Algorithm {
-        LAB("LAB色度压制（保留文字，★推荐）"),
-        DOCUMENT("HSV形态学"),
+        RED_CHANNEL("红色通道扣除（★推荐，保留章下文字）"),
+        LAB("LAB色度压制（实验性）"),
+        DOCUMENT("HSV逐像素去红"),
         PRECISE("精确定位去除"),
         SIMPLE("简单红色像素替换（最快）");
 
@@ -240,6 +241,8 @@ public class SealRemovalService {
 
     private static BufferedImage applyAlgorithm(BufferedImage image, Algorithm algo) {
         switch (algo) {
+            case RED_CHANNEL:
+                return RedChannelSealRemover.removeSeal(image);
             case LAB:
                 return LabSealRemover.removeSeal(image);
             case DOCUMENT:
@@ -304,8 +307,18 @@ public class SealRemovalService {
             .append("<h1>📄 去红章处理报告</h1>")
             .append("<div class=\"meta\">")
             .append("<div>源文件：<span>").append(escapeHtml(pdfFile.getName())).append("</span></div>")
-            .append("<div>算法：<span>").append(escapeHtml(algorithm.displayName)).append("</span></div>")
-            .append("<div>总页数：<span>").append(result.pages.size()).append("</span></div>")
+            .append("<div>算法：<span>").append(escapeHtml(algorithm.displayName)).append("</span></div>");
+        // 插入主要参数说明
+        if (algorithm == Algorithm.DOCUMENT) {
+            html.append("<div style='font-size:12px;color:#888;margin:2px 0 6px 0'>主要参数：色相[0-30,300-360]°，饱和度≥0.12，明度≥0.15，仅R>G且R>B像素判为红章</div>");
+        } else if (algorithm == Algorithm.PRECISE) {
+            html.append("<div style='font-size:12px;color:#888;margin:2px 0 6px 0'>主要参数：区域连通面积≥400像素，红色判定同DOCUMENT</div>");
+        } else if (algorithm == Algorithm.SIMPLE) {
+            html.append("<div style='font-size:12px;color:#888;margin:2px 0 6px 0'>主要参数：红色像素直接替换，红色判定同DOCUMENT</div>");
+        } else if (algorithm == Algorithm.LAB) {
+            html.append("<div style='font-size:12px;color:#888;margin:2px 0 6px 0'>主要参数：LAB色度压制，A通道动态阈值，L>30有效，输出灰度</div>");
+        }
+        html.append("<div>总页数：<span>").append(result.pages.size()).append("</span></div>")
             .append("<div>处理时间：<span>")
             .append(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()))
             .append("</span></div>")

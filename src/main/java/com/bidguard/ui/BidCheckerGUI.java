@@ -335,7 +335,8 @@ public class BidCheckerGUI extends JFrame {
         progressBar.setStringPainted(true);
         progressBar.setString("就绪");
 
-        JLabel versionLabel = new JLabel("BidGuard v2.07 - 批量文件对比");
+        String version = com.bidguard.config.SimilarityConfig.getInstance().version;
+        JLabel versionLabel = new JLabel("BidGuard v" + version + " - 去红章算法更");
 
         statusPanel.add(progressBar, BorderLayout.CENTER);
         statusPanel.add(versionLabel, BorderLayout.EAST);
@@ -1644,12 +1645,13 @@ public class BidCheckerGUI extends JFrame {
         JPanel algoPanel = new JPanel(new BorderLayout(5, 5));
         algoPanel.setBorder(BorderFactory.createTitledBorder("去章算法"));
         sealAlgorithmCombo = new JComboBox<>(SealRemovalService.Algorithm.values());
-        sealAlgorithmCombo.setSelectedItem(SealRemovalService.Algorithm.LAB);
+        sealAlgorithmCombo.setSelectedItem(SealRemovalService.Algorithm.RED_CHANNEL);
         algoPanel.add(sealAlgorithmCombo, BorderLayout.CENTER);
 
         JTextArea algoDesc = new JTextArea(
-            "DOCUMENT：HSV色彩空间+形态学，最佳综合效果\n" +
-            "PRECISE：先定位印章区域再去除，精度最高\n" +
+            "RED_CHANNEL（★推荐）：红色通道扣除法，红章下的黑字完整保留\n" +
+            "DOCUMENT：HSV逐像素去红，直接替换背景色\n" +
+            "PRECISE：BFS定位大连通区域再替换，噪点少\n" +
             "SIMPLE：直接替换红色像素，速度最快");
         algoDesc.setEditable(false);
         algoDesc.setLineWrap(true);
@@ -1734,7 +1736,7 @@ public class BidCheckerGUI extends JFrame {
         sealLogArea.setText(
             "使用说明：\n" +
             "1. 选择一个扫描件 PDF（含红章）\n" +
-            "2. 选择去章算法（推荐 DOCUMENT）\n" +
+            "2. 选择去章算法（推荐 RED_CHANNEL，可保留章下文字）\n" +
             "3. 点击「① 执行去章 + 保存PNG」\n" +
             "   → 每页生成 page_XXX_original.png 和 page_XXX_no_seal.png\n" +
             "   → 生成 HTML 对比报告（原图/去章图并排）\n" +

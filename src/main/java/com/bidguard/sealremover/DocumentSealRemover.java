@@ -25,7 +25,7 @@ public class DocumentSealRemover {
     public static BufferedImage removeSeal(BufferedImage image) {
         if (image == null) return null;
         int w = image.getWidth(), h = image.getHeight();
-        System.out.println("[DocumentSealRemover] " + w + "x" + h);
+        System.out.println("[DocumentSealRemover v2.10] " + w + "x" + h);
 
         int bgColor = estimateGlobalBackground(image);
         System.out.printf("  背景色 #%06X%n", bgColor & 0xFFFFFF);

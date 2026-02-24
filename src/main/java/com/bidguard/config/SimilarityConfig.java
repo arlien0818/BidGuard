@@ -18,7 +18,9 @@ public class SimilarityConfig {
     private static SimilarityConfig instance;
     private Properties properties;
     
-    // ========== 段落分割参数 ==========
+    // ========== 版本号 ========== 
+    public final String version;
+    // ========== 段落分割参数 ========== 
     public final int paragraphMinLength;
     
     // ========== 子串匹配参数 ==========
@@ -94,6 +96,7 @@ public class SimilarityConfig {
     private SimilarityConfig() {
         properties = new Properties();
         loadConfig();
+        version = getStringProperty("version", "2.12");
         // 先读取 ocr.type，以决定是否需要加载本地未提交的密钥文件
         String ocrTypeTemp = getStringProperty("ocr.type", "local");
         if ("aliyun".equalsIgnoreCase(ocrTypeTemp)) {
