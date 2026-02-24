@@ -118,7 +118,10 @@ public class DocumentSealRemover {
         return result;
     }
 
-    /** 对掩膜内的像素直接填充背景色（不做邻域均值，避免混入文字暗像素） */
+    /**
+     * 对掩膜内【且仍为红色】的像素填充背景色，其余像素（含印章下方的黑字）保持原值。
+     * 二次红色判断是关键：膨胀/掩膜可能覆盖了紧邻印章的深色文字像素，不能无脑替换。
+     */
     private static BufferedImage replaceWithBg(BufferedImage image,
                                                boolean[][] mask, int bgColor) {
         int w = image.getWidth(), h = image.getHeight();
@@ -126,11 +129,13 @@ public class DocumentSealRemover {
         int processed = 0;
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
-                if (mask[x][y]) {
+                int orig = image.getRGB(x, y);
+                // 只替换掩膜内且像素本身仍是红色的，黑色文字像素原样保留
+                if (mask[x][y] && isRedSealColor(orig)) {
                     result.setRGB(x, y, bgColor);
                     processed++;
                 } else {
-                    result.setRGB(x, y, image.getRGB(x, y));
+                    result.setRGB(x, y, orig);
                 }
             }
         }

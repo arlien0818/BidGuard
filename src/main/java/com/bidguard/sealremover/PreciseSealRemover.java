@@ -58,15 +58,19 @@ public class PreciseSealRemover {
         // 3. 膨胀 1px
         boolean[][] finalMask = dilate(sealMask, w, h, DILATE_RADIUS);
 
-        // 4. 直接用全局背景色替换，不做邻域均值
+        // 4. 直接用全局背景色替换，但只替换掩膜内仍为红色的像素，黑字保留
         int bgColor = DocumentSealRemover.estimateGlobalBackground(image);
         System.out.printf("  全局背景色: #%06X%n", bgColor & 0xFFFFFF);
         BufferedImage result = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
         int processed = 0;
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
-                if (finalMask[x][y]) { result.setRGB(x, y, bgColor); processed++; }
-                else                 { result.setRGB(x, y, image.getRGB(x, y)); }
+                int orig = image.getRGB(x, y);
+                if (finalMask[x][y] && DocumentSealRemover.isRedSealColor(orig)) {
+                    result.setRGB(x, y, bgColor); processed++;
+                } else {
+                    result.setRGB(x, y, orig);
+                }
             }
         }
         System.out.println("  替换像素数: " + processed);
