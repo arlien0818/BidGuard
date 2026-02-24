@@ -1,4 +1,4 @@
-﻿package com.bidguard.image;
+package com.bidguard.image;
 
 import com.bidguard.sealremover.DocumentSealRemover;
 
