@@ -85,7 +85,7 @@ public class BidCheckerGUI extends JFrame {
         tabbedPane = new JTabbedPane();
 
         JPanel comparePanel = createComparePanel();
-        tabbedPane.addTab("文件对比", comparePanel);
+        tabbedPane.addTab("标书查重", comparePanel);
 
         JPanel ocrPanel = createOcrPanel();
         tabbedPane.addTab("OCR识别", ocrPanel);

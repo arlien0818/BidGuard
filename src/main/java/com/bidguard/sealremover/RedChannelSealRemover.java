@@ -48,13 +48,21 @@ public class RedChannelSealRemover {
                         // ===== 3. 去饱和（往灰色方向压）=====
                         int avg = (r + g + b) / 3;
                         g = (g + avg) / 2;
-                        b = (b + avg) / 2;              
-    
+                        b = (b + avg) / 2;
+
                         // ===== 4. 整体提亮（核心）=====
                         int lift = redness * 2;   // 可以改成 *3 如果还不够
-                        r = Math.min(255, r + lift);  
-                        g = Math.min(255, g + lift);    
+                        r = Math.min(255, r + lift);
+                        g = Math.min(255, g + lift);
                         b = Math.min(255, b + lift);
+
+                        // ===== 5. 轻微压暗低亮度像素 =====
+                        int gray = (r + g + b) / 3;
+                        if (gray < 120) {
+                            r = (int)(r * 0.9);
+                            g = (int)(g * 0.9);
+                            b = (int)(b * 0.9);
+                        }
                     }
 
                     int newRGB = (r << 16) | (g << 8) | b;
