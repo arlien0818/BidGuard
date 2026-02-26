@@ -100,6 +100,7 @@ public class BidChecker {
    
 
     // 常用停用词列表
+    @SuppressWarnings("unused")
     private static final Set<String> STOP_WORDS = Set.of(
             "的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都", "一", "一个", "上", "也", "很", "到", "说", "要", "去", "你", "会", "着", "没有", "看", "好", "自己", "这",
             "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "a", "an", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did"
@@ -338,6 +339,7 @@ public class BidChecker {
 
     // 新的TF-IDF计算方法，使用词频映射而不是原始文本
     //这个方法目前没有任何地方用到。
+    @SuppressWarnings("unused")
     private static double calculateTFIDFWithTFMaps(String term, Map<String, Integer> tf, List<Map<String, Integer>> tfCorpus) {
         int termFreq = tf.getOrDefault(term, 0);
         if (termFreq == 0) {
@@ -1152,6 +1154,7 @@ public class BidChecker {
         return sb.toString();
     }
 
+    @SuppressWarnings("unused")
     public static void main(String[] args) {
         System.out.println("========================================");
         System.out.println(">>> 代码版本: 2026-02-03 v5 已重新编译 <<<");

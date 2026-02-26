@@ -2,16 +2,14 @@ package com.bidguard.ocr;
 
 import com.bidguard.config.SimilarityConfig;
 
-import com.aliyun.tea.*;
+
 import com.aliyun.ocr_api20210707.models.*;
 import com.aliyun.teautil.models.RuntimeOptions;
 import com.google.gson.GsonBuilder;
 
 import java.io.FileInputStream;
 import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.Base64;
+
 
 public class RecognizeCharacter {
 

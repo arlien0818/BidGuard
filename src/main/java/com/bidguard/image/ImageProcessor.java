@@ -5,14 +5,14 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
-import java.util.logging.Logger;
+// import java.util.logging.Logger;
 
 /**
  * 图像处理器 - 负责A4页面图像读取、预处理和格式转换
  */
 public class ImageProcessor {
     
-    private static final Logger LOGGER = Logger.getLogger(ImageProcessor.class.getName());
+    // private static final Logger LOGGER = Logger.getLogger(ImageProcessor.class.getName());
     
     // A4页面标准尺寸 (像素，300DPI)
     public static final int A4_WIDTH_300DPI = 2480;
