@@ -1,11 +1,19 @@
 # BidGuard 项目介绍
 
 ## 一句话概括
+BidGuard 是一个智能文档查重与标注工具，支持 PDF、Word、Excel、TXT 多格式，自动两两配对，精准检测重复片段并在 PDF 上高亮标注，适用于招标文件、合同等场景。
 
-BidGuard 是一个招标文档相似度检测工具——输入多份 PDF/Word/Excel 文档，自动两两配对，通过 N-Gram + Jaccard 算法计算文本相似度，定位重复片段在原文中的精确位置（页码+坐标），最终在 PDF 上画出标注框并输出检测报告。
+## 主要功能
+- 多文件批量查重（支持 n 份文件，两两配对 $C(n,2)$）
+- 智能文本提取（自动判别扫描件/可提取文本 PDF，支持 OCR）
+- N-Gram + Jaccard 相似度算法，定位重复片段
+- 连续重复片段检测（动态规划，支持字符级定位）
+- 查重结果报告（JSON+TXT，含页码、坐标、置信度等）
+- PDF自动标注（高亮重复区域，输出新PDF）
+- 可配置的 OCR 流程（支持 EasyOCR/阿里云，DPI/去红章可调）
+- GUI 界面（Swing），支持批量操作、进度显示、配置热重载
 
-## 整体架构
-
+## 技术架构
 ```
 Main → BidCheckerGUI (Swing UI)
          │
@@ -22,140 +30,74 @@ Main → BidCheckerGUI (Swing UI)
          └─ SimilarityConfig                   ← 全局可热重载配置
 ```
 
-## 核心流程（按执行顺序）
+## 核心流程
+1. 文件选择与配对（支持多文件批量查重）
+2. 文本提取（自动判别扫描件/Word转PDF/Excel/TXT）
+3. OCR识别（扫描件自动走OCR，支持去红章预处理）
+4. 相似度计算（N-Gram、Jaccard、动态阈值、段落/全文/连续片段检测）
+5. 位置映射（字符范围→文字块→页码+坐标）
+6. 查重报告生成（JSON+TXT，含详细统计）
+7. PDF标注（自动高亮重复区域，输出新PDF）
+8. 配置系统（所有参数可调，支持热重载）
 
-### 1. 文件选择与配对
-
-用户通过 `BidCheckerGUI` 选择多份文件。`PairGenerator.generatePairs()` 对 n 个文件做 $C(n,2)$ 两两组合，生成 `FilePair` 对象列表。
-
-### 2. 文本提取
-
-`BidChecker.compareFiles()` 根据文件后缀分发：
-- `.docx` → `readWord()` 用 Apache POI 提取段落和表格文本
-- `.pdf` → `readPDF()` 先调 `PdfTextExtractor.extract()` 尝试直接提取；如果判定为扫描件（`isScannedPdf()`：每页平均字符数 < 50），则走 OCR 流程
-- `.xlsx` → `readExcel()` 逐 Sheet/Row/Cell 拼接
-- `.txt` → 直接读取
-
-文本提取后经 `PdfTextCleaner.clean()` 过滤噪声行（十六进制碎片、页码、纯标点等）。
-
-### 3. OCR 识别（扫描件专用）
-
-`PdfTask.ensureOcr()` 以双重检查锁（DCL）懒加载 OCR 结果。实际调用 `OcrServiceFactory.recognizePdf()`:
-- 先查文件缓存（按 PDF 修改时间判断有效性），命中则跳过识别
-- 根据 `config.properties` 中 `ocr.type` 配置，选择本地 EasyOCR（`OcrServiceClient`，HTTP 调 `localhost:5001`）或阿里云 OCR
-- 识别前由 `PdfPageRenderer.renderPage()` 将 PDF 页渲染为图片，**DPI 从配置文件读取**（`ocr.render.dpi`，默认 200）
-- **可选去红章**：如果 `ocr.remove.seal.enabled=true`，则在识别前调用 `SimpleSealRemover.removeSeal()` 去除红色公章（当前默认关闭）
-- 识别结果包含每个文字块的 text、confidence、bbox（边界框坐标），缓存到 JSON 文件
-
-### 4. 相似度计算（BidChecker 核心算法）
-
-这是整个项目的核心，全部在 `BidChecker.java` 中实现。
-
-#### 4.1 文本归一化
-
-`normalizeForSimilarity()` — 统一小写，替换不可见字符（NBSP、零宽空格等），压缩多余空白。所有后续算法的输入都先经此处理。
-
-#### 4.2 N-Gram 生成
-
-`shingles(text, n)` — 生成文本的 N-Gram 集合。根据空格占比自动区分语言：
-- 中文（空格占比 < 5%）：去掉空格后逐字符滑动窗口，生成字符级 N-Gram
-- 英文：按空格分词后生成 Token 级 N-Gram
-
-#### 4.3 Jaccard 相似度
-
-`similarityJaccardNGram(a, b, n)` — 基于 N-Gram 集合计算 Jaccard 系数：$|A \cap B| / |A \cup B| \times 100$。当前主要使用 3-Gram（2-Gram 过于宽松易误报）。
-
-#### 4.4 综合相似度
-
-`enhancedSimilarity()` — 按配置权重融合三个维度的得分：
-- **词汇相似度**：`similarityJaccardNGram()`，当前权重 1.0（主要指标）
-- **语义相似度**：`calculateTFIDFSimilarity()`，基于 TF 词频向量的**余弦相似度**（当前权重 0，预留）
-- **结构相似度**：`calculateStructuralSimilarity()`，比较段落数、文档长度、词汇密度的加权差异（当前权重 0，预留）
-
-`analyzeDocumentSimilarity()` 是完整版，额外输出 `DocumentSimilarityResult`，包含各维度得分和文字分析结论。
-
-#### 4.5 TF-IDF 语义相似度（预留）
-
-`calculateTFIDFSimilarity()` — 先通过 `normalizeForTFIDF()` 做语言感知的文本预处理（中文生成字符二元组作为"词"，英文过滤停用词），再由 `calculateTermFrequency()` 统计词频，最终计算两个 TF 向量的**余弦相似度**。
-
-#### 4.6 动态阈值判定
-
-`getSimilarityLevel()` — 根据文档长度动态选择阈值（大文档 75%、中文档 70%、小文档 65%），输出"高度相似/中等相似/相似度较低"判定。
-
-#### 4.7 段落级匹配
-
-`splitIntoParagraphs()` — 按换行切分，过滤短于 30 字符的行，输出带位置信息的 `Paragraph` 列表。
-
-`matchParagraphs()` — 对两篇文档的段落做笛卡尔积（$M \times N$），逐对计算 3-Gram Jaccard 相似度，超过阈值（默认 85%）的计入 `ParagraphMatchingReport`。
-
-#### 4.8 连续重复片段检测（关键功能）
-
-`findCommonSubstrings(text1, text2, minLength)` — 用**动态规划（DP）**构建最长公共子串矩阵，找出所有长度 ≥ minLength（默认 30 字符）的连续相同片段。通过 `used[]` 数组去除重叠，按位置排序输出 `SubstringMatch` 列表。
-
-`findCrossDocumentSubstrings()` 是其全文版本，忽略段落边界，在整个文档级别查找重复。这是 `OcrDuplicateDetector` 的核心依赖。
-
-### 5. 位置映射与查重报告
-
-`OcrDuplicateDetector.detectDuplicates()` 调用 `BidChecker.findCrossDocumentSubstrings()` 拿到重复片段后，通过 `mapCharRangeToBlocks()` 将字符范围映射回 OCR 文字块的页码和 bbox 坐标，生成包含精确位置的 `DuplicateDetectionResult`，序列化为 JSON。
-
-### 6. PDF 标注
-
-`PdfAnnotator.annotatePdfs()` 读取查重 JSON，将 OCR 坐标动态换算到 PDF 坐标（根据配置的 `ocr.render.dpi` 计算缩放比例），用 PDFBox 在原 PDF 上绘制半透明红色矩形框标记重复区域，输出标注后的 PDF。
-
-### 7. 批量编排
-
-`BatchDuplicateRunner.runBatchDuplicateCheck()` 串联以上全部步骤：生成配对 → OCR → 查重 → JSON → 标注。标注失败不中断批处理。
+## 特色与改进
+- 批量查重与标注：支持多文件自动两两查重并标注，适合大批量文档处理
+- 智能判别扫描件：PDF自动判别是否需OCR，流程全自动
+- OCR流程可配置：DPI、去红章、引擎类型等均可在 config.properties 中调整
+- 查重算法升级：支持连续片段检测、段落级匹配、综合相似度
+- GUI界面优化：新增OCR识别选项卡、配置展示、进度条、批量操作
+- 报告输出丰富：JSON+TXT报告，PDF标注，统计信息全面
 
 ## 配置系统
-
 `SimilarityConfig` 单例从 `config.properties`（UTF-8）加载所有参数，敏感信息（阿里云 AK）从未纳入版本控制的 `local.properties` 加载。支持 `reload()` 热重载。所有算法阈值、权重、N-Gram 大小等均可通过配置文件调整，无需重新编译。
 
 ### 关键配置项
-
-**OCR 渲染参数**：
 - `ocr.render.dpi`：PDF 渲染为图片的 DPI，影响识别精度和速度（默认 200）
 - `ocr.remove.seal.enabled`：是否在识别前去除红章（默认 false，预留功能）
-
-**OCR 服务配置**：
 - `ocr.type`：OCR 引擎类型（local/aliyun）
 - `ocr.image.max.dimension`：图片压缩最大边长（默认 1200）
 - `ocr.jpeg.quality`：JPEG 压缩质量（默认 0.85）
-
-**相似度算法参数**：
 - `substring.min.length`：连续重复片段最小长度（默认 30 字符）
 - `paragraph.similarity.threshold`：段落相似度阈值（默认 85%）
 - `similarity.weight.*`：综合相似度各维度权重配置
 
-## 最近改进（2026-02-23）
 
-### OCR 流程优化与模块化
-- **DPI 配置化**：将硬编码的渲染 DPI 提取为配置项 `ocr.render.dpi`，支持用户根据文档质量动态调整（150-300 DPI）
-- **去红章预留接口**：在 `OcrServiceFactory` 中添加可选的去红章步骤，通过 `ocr.remove.seal.enabled` 控制，为将来的去红章功能模块做好准备
-- **坐标转换动态化**：`PdfAnnotator` 的 DPI 缩放比例从配置动态计算，消除硬编码，确保标注坐标始终与识别 DPI 一致
-- **代码解耦**：确认 `PdfPageRenderer`、`OcrServiceFactory`、`SimpleSealRemover` 等模块完全独立，为独立的去红章功能模块奠定基础
+软件plantUML:
+@startuml
+start
 
-### GUI 界面新增功能：OCR 识别选项卡
-新增独立的"OCR识别"选项卡，用于测试和验证OCR识别效果：
+:接收输入文件;
 
-**主要功能**：
-1. **文件选择**：选择单个PDF文件进行OCR识别
-2. **配置展示**：实时显示当前OCR配置参数（DPI、去红章开关、引擎类型等）
-3. **执行识别**：一键执行OCR识别，显示实时进度
-4. **结果展示**：
-   - 识别统计（总页数、字符数、文字块数、平均置信度）
-   - 文本内容预览（前500字符）
-   - 识别耗时统计
-5. **保存结果**：快速访问缓存的OCR识别结果JSON文件
-6. **配置重载**：无需重启程序即可重新加载配置文件
+if (文件类型?) then (PDF)
+    
+    if (是否扫描件?) then (是)
+        
+        if (OCR配置?) then (本地EasyOCR)
+            :去除红章【必须用SimpleSealRemover.removeSeal】;
+            :EasyOCR识别;
+            :查重BatchDuplicateRunner.runBatchDuplicateCheck(List<PdfTask> pdfTasks) ;
+            :生成查重报告;
+            stop
+        
+        else (阿里云)
+            :去除红章【必须用SimpleSealRemover.removeSeal】;
+            :阿里云通用文字识别;
+            :查重BatchDuplicateRunner.runBatchDuplicateCheck(List<PdfTask> pdfTasks) ;
+            :标注;
+            :生成查重报告;
+            stop
+        endif
+    
+    else (否，Word转的PDF)
+        :查重BatchDuplicateRunner.runBatchDuplicateCheck(List<PdfTask> pdfTasks) ;
+        :生成查重报告;
+        stop
+    endif
 
-**使用场景**：
-- 测试不同DPI设置对识别效果的影响
-- 对比去红章前后的识别准确率
-- 快速验证单个PDF文件的OCR识别质量
-- 为去红章功能调试提供测试环境
+else (Word/TXT)
+    :查重BatchDuplicateRunner.runBatchDuplicateCheck(List<PdfTask> pdfTasks) ;
+    :生成查重报告;
+    stop
+endif
 
-**技术实现**：
-- 使用 `SwingWorker` 实现后台异步OCR识别，避免界面冻结
-- 复用现有的 `OcrServiceFactory` 和 `PdfTask` 模块
-- 自动读取和显示缓存的OCR结果，提高效率
-
+@enduml

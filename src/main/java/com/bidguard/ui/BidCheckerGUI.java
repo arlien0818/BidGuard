@@ -125,30 +125,49 @@ public class BidCheckerGUI extends JFrame {
         fileTypePanel.add(txtRadio);
         fileTypePanel.add(pdfRadio);
 
-        // 按钮面板
-        JPanel buttonPanel = new JPanel(new GridLayout(6, 1, 5, 5));
+        // 按钮面板（两列布局，4行）
+        JPanel buttonPanel = new JPanel(new GridLayout(4, 2, 5, 5));
 
         selectFilesButton = new JButton("选择标书文件（≥2个）");
+        selectFilesButton.setPreferredSize(new Dimension(100, 22));
+        selectFilesButton.setFont(selectFilesButton.getFont().deriveFont(12f));
         selectFilesButton.addActionListener(e -> selectMultipleFiles());
 
         readAllFilesButton = new JButton("读取所选文件");
+        readAllFilesButton.setPreferredSize(new Dimension(100, 22));
+        readAllFilesButton.setFont(readAllFilesButton.getFont().deriveFont(12f));
         readAllFilesButton.setEnabled(false);
         readAllFilesButton.addActionListener(e -> readAllFiles());
 
         compareButton = new JButton("一键对比");
+        compareButton.setPreferredSize(new Dimension(100, 22));
+        compareButton.setFont(compareButton.getFont().deriveFont(12f));
         compareButton.setEnabled(false);
         compareButton.addActionListener(e -> compareFiles());
 
         generateAnnotationDataButton = new JButton("生成查重报告");
+        generateAnnotationDataButton.setPreferredSize(new Dimension(100, 22));
+        generateAnnotationDataButton.setFont(generateAnnotationDataButton.getFont().deriveFont(12f));
         generateAnnotationDataButton.setEnabled(false);
         generateAnnotationDataButton.setToolTipText("TXT/PDF均可：生成详细的查重检测报告（JSON+TXT格式）");
         generateAnnotationDataButton.addActionListener(e -> generateDuplicateReport());
 
         testPairGeneratorButton = new JButton("测试配对生成器");
+        testPairGeneratorButton.setPreferredSize(new Dimension(100, 22));
+        testPairGeneratorButton.setFont(testPairGeneratorButton.getFont().deriveFont(12f));
         testPairGeneratorButton.setToolTipText("测试从多个文件生成所有可能的配对组合");
         testPairGeneratorButton.addActionListener(e -> testPairGenerator());
 
+        annotatePdfButton = new JButton("生成PDF标注");
+        annotatePdfButton.setPreferredSize(new Dimension(100, 22));
+        annotatePdfButton.setFont(annotatePdfButton.getFont().deriveFont(12f));
+        annotatePdfButton.setEnabled(false);
+        annotatePdfButton.addActionListener(e -> annotatePdfs());
+        annotatePdfButton.setToolTipText("仅PDF：根据查重报告在PDF上标注重复位置（需先生成查重报告）");
+
         batchRunButton = new JButton("批量执行查重并标注");
+        batchRunButton.setPreferredSize(new Dimension(100, 22));
+        batchRunButton.setFont(batchRunButton.getFont().deriveFont(12f));
         batchRunButton.setToolTipText("对所有生成的配对依次执行 OCR/查重/保存/标注（会缓存 OCR）");
         batchRunButton.setEnabled(false);
         batchRunButton.addActionListener(e -> runBatchDuplicateAndAnnotate());
@@ -158,7 +177,9 @@ public class BidCheckerGUI extends JFrame {
         buttonPanel.add(compareButton);
         buttonPanel.add(generateAnnotationDataButton);
         buttonPanel.add(testPairGeneratorButton);
+        buttonPanel.add(annotatePdfButton);
         buttonPanel.add(batchRunButton);
+        buttonPanel.add(new JLabel()); // 占位
 
         // 组合文件类型选择和按钮面板
         JPanel topPanel = new JPanel(new BorderLayout(5, 5));
@@ -171,39 +192,32 @@ public class BidCheckerGUI extends JFrame {
         fileListModel = new DefaultListModel<>();
         fileList = new JList<>(fileListModel);
         fileList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        fileList.setVisibleRowCount(7);
         JScrollPane fileListScroll = new JScrollPane(fileList);
         fileListScroll.setBorder(BorderFactory.createTitledBorder("已选文件"));
+        fileListScroll.setPreferredSize(new Dimension(0, 90));
 
-        leftPanel.add(fileListScroll, BorderLayout.CENTER);
+        // 文本对比结果区域放在已选文件下方
+        compareResultArea = new JTextArea();
+        compareResultArea.setEditable(false);
+        JScrollPane compareResultScroll = new JScrollPane(compareResultArea);
+        compareResultScroll.setBorder(BorderFactory.createTitledBorder("文本对比结果"));
+        compareResultScroll.setPreferredSize(new Dimension(0, 100));
 
-        // === 右侧：预览区 ===
+        // 左侧竖直分为文件列表和对比结果
+        JPanel leftListPanel = new JPanel();
+        leftListPanel.setLayout(new BoxLayout(leftListPanel, BoxLayout.Y_AXIS));
+        leftListPanel.add(fileListScroll);
+        leftListPanel.add(compareResultScroll);
+
+        leftPanel.add(leftListPanel, BorderLayout.CENTER);
+
+        // === 右侧：预览区 + 查重标注日志，上下平分 ===
         JPanel rightPanel = new JPanel(new BorderLayout(5, 5));
 
         previewArea = createPreviewTextArea();
         JScrollPane previewScroll = new JScrollPane(previewArea);
         previewScroll.setBorder(BorderFactory.createTitledBorder("文本预览"));
-
-
-        rightPanel.add(previewScroll, BorderLayout.CENTER);
-
-        // === 底部：分离的结果显示区域 ===
-        JPanel bottomPanel = new JPanel(new BorderLayout(5, 5));
-
-        // 标注按钮
-        annotatePdfButton = new JButton("生成PDF标注");
-        annotatePdfButton.setEnabled(false);
-        annotatePdfButton.addActionListener(e -> annotatePdfs());
-        annotatePdfButton.setPreferredSize(new Dimension(150, 30));
-        annotatePdfButton.setToolTipText("仅PDF：根据查重报告在PDF上标注重复位置（需先生成查重报告）");
-
-        JPanel annotatePanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
-        annotatePanel.add(annotatePdfButton);
-
-        // 文本对比结果区域
-        compareResultArea = new JTextArea();
-        compareResultArea.setEditable(false);
-        JScrollPane compareResultScroll = new JScrollPane(compareResultArea);
-        compareResultScroll.setBorder(BorderFactory.createTitledBorder("文本对比结果"));
 
         // 查重标注日志区域
         annotationLogArea = new JTextArea();
@@ -211,16 +225,12 @@ public class BidCheckerGUI extends JFrame {
         JScrollPane annotationLogScroll = new JScrollPane(annotationLogArea);
         annotationLogScroll.setBorder(BorderFactory.createTitledBorder("查重标注日志"));
 
-        // 使用分割面板将两个区域上下分割
-        JSplitPane resultSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
-            compareResultScroll, annotationLogScroll);
-        resultSplitPane.setResizeWeight(0.5);
-        resultSplitPane.setPreferredSize(new Dimension(0, 200));
+        // 上下平分右侧面板
+        JSplitPane rightSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, previewScroll, annotationLogScroll);
+        rightSplitPane.setResizeWeight(0.5);
+        rightSplitPane.setContinuousLayout(true);
 
-        bottomPanel.add(annotatePanel, BorderLayout.NORTH);
-        bottomPanel.add(resultSplitPane, BorderLayout.CENTER);
-
-        rightPanel.add(bottomPanel, BorderLayout.SOUTH);
+        rightPanel.add(rightSplitPane, BorderLayout.CENTER);
 
         // === 整体布局：左右分割 ===
         JSplitPane mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
